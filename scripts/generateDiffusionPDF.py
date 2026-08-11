@@ -63,6 +63,11 @@ def build_pixel_grid(grid, cell, x0, top, initial=None):
     drawing the instant it opens and the first Generate click is itself an
     end-to-end check: if the picture does not visibly change, the JS agrees
     with numpy.
+
+    Deliberately NOT ReadOnly. A pushbutton is not a data field, so the flag
+    buys nothing here, and PDFium treats a ReadOnly widget as inert -- it stops
+    regenerating the appearance when a script changes /MK/BG, so fillColor
+    writes land in the object and never reach the screen.
     """
     fields = []
     for r in range(grid):
@@ -76,7 +81,6 @@ def build_pixel_grid(grid, cell, x0, top, initial=None):
                 background=[round(shade, 4)],
                 highlight="N",
                 flags=4,
-                read_only=True,
             ))
     return fields
 
@@ -92,6 +96,10 @@ def main():
     p.add_argument("--paint-mode", choices=["gray", "chars"], default="gray")
     p.add_argument("--levels", type=int, default=16)
     p.add_argument("--paint-every", type=int, default=2)
+    p.add_argument("--nudge", choices=["none", "caption", "display", "value"],
+                   default="caption",
+                   help="what to poke after fillColor to force a repaint. "
+                        "Cyclable at runtime with the Nudge button.")
     p.add_argument("--steps", type=int, default=None)
     p.add_argument("--guidance", type=float, default=None)
     p.add_argument("--seed", type=int, default=7)
@@ -120,6 +128,7 @@ def main():
         "__CONSOLE_LINE_COUNT__": CONSOLE_ROWS,
         "__PAINT_MODE__": a.paint_mode,
         "__PAINT_EVERY__": a.paint_every,
+        "__NUDGE__": a.nudge,
         "__NORM_BINS__": model["norm_bins"],
         "__ABAR__": js_literal(model["abar"]),
         "__NORM__": js_literal(model["norm"]),
@@ -178,16 +187,24 @@ def main():
         150, HEIGHT - 22, 8,
         f"{grid}x{grid} denoising diffusion, {steps} steps, no network.")
 
-    fields = build_pixel_grid(grid, cell, x0, top, initial)
-
-    # Character-ramp rows, hidden by default. Value writes are the update path
-    # llm.pdf already depends on, so if fillColor turns out not to repaint,
-    # this is the fallback that still animates.
+    # Character-ramp rows instead of a colour grid. Writing .value on a text
+    # field is the update path llm.pdf's entire console already depends on, so
+    # it is the one that is known to work in this viewer -- which makes it the
+    # right fallback when fillColor turns out not to repaint.
     if a.paint_mode == "chars":
+        fields = []
+        # Courier advances 0.6 em and the JS emits two characters per pixel, so
+        # a row of `grid` pixels is 1.2 * grid * size wide. Size the font to fill
+        # the span, then space the rows by the same amount to keep it square.
+        size = span / (1.2 * grid)
+        row_h = size
+        char_top = top
         for r in range(grid):
             fields.append(create_field(
-                f"row_{r}", x0, top - (r + 1) * cell, span, cell, "",
-                read_only=True))
+                f"row_{r}", x0, char_top - (r + 1) * row_h, span, row_h, "",
+                da=f"/F1 {size:.2f} Tf 0 g"))
+    else:
+        fields = build_pixel_grid(grid, cell, x0, top, initial)
 
     controls_y = top - span - 34
     labels_y = controls_y + 27
@@ -206,9 +223,15 @@ def main():
 
     fields.extend(create_action_buttons([
         {"name": "generateButton", "x": x0 + 313, "y": controls_y,
-         "width": 76, "height": 22, "label": "Generate", "js_function": "dsBegin()"},
-        {"name": "stepButton", "x": x0 + 394, "y": controls_y,
-         "width": 54, "height": 22, "label": "Step", "js_function": "dsStepOnce()"},
+         "width": 70, "height": 22, "label": "Generate", "js_function": "dsBegin()"},
+        {"name": "stepButton", "x": x0 + 388, "y": controls_y,
+         "width": 42, "height": 22, "label": "Step", "js_function": "dsStepOnce()"},
+        {"name": "clearButton", "x": x0 + 435, "y": controls_y,
+         "width": 42, "height": 22, "label": "Clear", "js_function": "dsClear()"},
+        # Whether a viewer needs a repaint nudge, and which one, cannot be
+        # settled without a viewer. This makes it a click instead of a rebuild.
+        {"name": "nudgeButton", "x": x0 + 482, "y": controls_y,
+         "width": 46, "height": 22, "label": "Nudge", "js_function": "dsNudge()"},
     ]))
 
     status_y = controls_y - 26
@@ -237,8 +260,10 @@ def main():
 
     size = os.path.getsize(a.output)
     macs = sum(r * c for n, r, c in tensors if n not in ("temb", "cemb"))
+    drawing = grid if a.paint_mode == "chars" else npix
     print(f"wrote {a.output}")
-    print(f"  {len(fields)} widgets ({npix} pixels + {len(fields) - npix} ui)")
+    print(f"  {len(fields)} widgets ({drawing} for the drawing, "
+          f"{len(fields) - drawing} ui), paint mode {a.paint_mode}")
     print(f"  {size:,} bytes ({size / 1e6:.1f} MB)")
     print(f"  {macs * steps * 2 / 1e6:.0f}M MAC per image")
 

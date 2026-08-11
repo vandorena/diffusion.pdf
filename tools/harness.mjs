@@ -220,21 +220,51 @@ function main() {
   // quantisation or the inversion shows up here rather than only on screen.
   if (ref.levels) {
     ctx.dsPaintCurrent();
-    const painted = new Map();
+    const fill = new Map(), text = new Map();
     for (const w of writes) {
-      if (w.op === "fillColor") painted.set(w.name, w.color);
+      if (w.op === "fillColor") fill.set(w.name, w.color);
+      else if (w.op === "value") text.set(w.name, w.v);
     }
     const n = ref.levels.length;
-    let missing = 0, wrong = 0, firstWrong = -1;
-    for (let i = 0; i < n; i++) {
-      const c = painted.get(`px_${i}`);
-      if (!c) { missing++; continue; }
-      const lvl = Math.round(c[1] * (ref.n_levels - 1));
-      if (lvl !== ref.levels[i]) { wrong++; if (firstWrong < 0) firstWrong = i; }
+    const grid = ref.grid;
+
+    // The chars build paints `grid` text rows rather than `grid*grid` colour
+    // widgets, so the same gate has to read whichever path the build uses.
+    // Keyed on row_0 alone: the boot diagnostic probes px_0's fillColor in
+    // both builds, so the absence of colour writes is not a reliable signal.
+    const charsMode = text.has("row_0");
+
+    if (charsMode) {
+      const RAMP = " .:-=+*#%@";
+      let wrong = 0, firstWrong = -1, missing = 0;
+      for (let r = 0; r < grid; r++) {
+        const got = text.get(`row_${r}`);
+        if (got === undefined) { missing++; continue; }
+        let want = "";
+        for (let c = 0; c < grid; c++) {
+          const u = (ref.image[r * grid + c] + 1) * 0.5;
+          let q = Math.floor(u * (RAMP.length - 1) + 0.5);
+          q = Math.max(0, Math.min(RAMP.length - 1, q));
+          const ch = RAMP.charAt(RAMP.length - 1 - q);
+          want += ch + ch;
+        }
+        if (got !== want) { wrong++; if (firstWrong < 0) firstWrong = r; }
+      }
+      if (missing) fail(`G4 ${missing} of ${grid} character rows were never written`);
+      else if (wrong) fail(`G4 ${wrong} character rows differ, first at row ${firstWrong}`);
+      else pass(`G4 all ${grid} character rows match the reference exactly`);
+    } else {
+      let missing = 0, wrong = 0, firstWrong = -1;
+      for (let i = 0; i < n; i++) {
+        const c = fill.get(`px_${i}`);
+        if (!c) { missing++; continue; }
+        const lvl = Math.round(c[1] * (ref.n_levels - 1));
+        if (lvl !== ref.levels[i]) { wrong++; if (firstWrong < 0) firstWrong = i; }
+      }
+      if (missing) fail(`G4 ${missing} of ${n} pixels were never painted`);
+      else if (wrong) fail(`G4 ${wrong} pixels differ, first at ${firstWrong}`);
+      else pass(`G4 all ${n} painted levels match the reference exactly`);
     }
-    if (missing) fail(`G4 ${missing} of ${n} pixels were never painted`);
-    else if (wrong) fail(`G4 ${wrong} pixels differ, first at ${firstWrong}`);
-    else pass(`G4 all ${n} painted levels match the reference exactly`);
   }
 
   if (alerts.length) fail(`app.alert fired: ${alerts[0].split("\n")[0]}`);

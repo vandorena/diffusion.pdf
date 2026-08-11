@@ -36,7 +36,7 @@ def create_page(width, height):
 
 
 def create_field(name, x, y, width, height, value="", f_type=PdfName.Tx,
-                 flags=None, read_only=False):
+                 flags=None, read_only=False, da=None):
     annotation = PdfDict()
     annotation.Type = PdfName.Annot
     annotation.Subtype = PdfName.Widget
@@ -53,6 +53,11 @@ def create_field(name, x, y, width, height, value="", f_type=PdfName.Tx,
         annotation.Ff = annotation.Ff | 1
     if flags is not None:
         annotation.F = flags
+    if da is not None:
+        # Default appearance: font, size and colour for the field's text.
+        # Without one the viewer picks its own, which is fine for a console but
+        # useless when the text has to line up on a grid.
+        annotation.DA = PdfString.encode(da)
 
     appearance = PdfDict()
     appearance.Type = PdfName.XObject
@@ -153,6 +158,19 @@ def attach_acroform(writer, fields):
     form = PdfDict()
     form.Fields = PdfArray(fields)
     form.NeedAppearances = PdfName("true")
+
+    # Resources for any /DA a field declares. A /DA naming /F1 is meaningless
+    # unless /F1 resolves here, and the viewer then silently falls back to its
+    # own font and size -- which shows up as text that will not line up.
+    font = PdfDict()
+    font.Type = PdfName.Font
+    font.Subtype = PdfName.Type1
+    font.BaseFont = PdfName.Courier
+    form.DR = PdfDict()
+    form.DR.Font = PdfDict()
+    form.DR.Font.F1 = font
+    form.DA = PdfString.encode("/F1 0 Tf 0 g")
+
     writer.trailer.Root.AcroForm = form
     return form
 

@@ -34,6 +34,7 @@ try {
     var DEF_SEED = __SEED_DEFAULT__;
     var DEF_WORD = "__WORD_DEFAULT__";
     var PAINT_EVERY = __PAINT_EVERY__;
+    var NUDGE = "__NUDGE__";   // none | caption | display | value
 
     // ------------------------------------------------------------------
     // viewer shim -- the only place that knows which viewer this is
@@ -228,23 +229,46 @@ try {
         for (var g = 0; g < LEVELS; g++) GRAYS.push(["G", g / (LEVELS - 1)]);
     }
 
+    // The one place that touches a widget's appearance.
+    //
+    // Assigning fillColor sets /MK/BG, but a viewer does not necessarily
+    // regenerate the appearance stream just because the property changed. NUDGE
+    // picks what else to poke to force it. Keep this the only paint path: when
+    // a viewer turns out to need something different, this is the single line
+    // that changes.
     function paintPixel(i, level) {
         var f = PX[i];
-        if (f) f.fillColor = GRAYS[level];
+        if (!f) return;
+        f.fillColor = GRAYS[level];
+        if (NUDGE === "caption") {
+            // A pushbutton's appearance is built from /MK, so re-setting the
+            // caption is the most direct way to ask for it to be rebuilt.
+            try { f.buttonSetCaption(""); } catch (e) { NUDGE = "none"; }
+        } else if (NUDGE === "display") {
+            try { f.display = display.visible; } catch (e) { NUDGE = "none"; }
+        } else if (NUDGE === "value") {
+            try { f.value = f.value; } catch (e) { NUDGE = "none"; }
+        }
     }
 
     var RAMP = " .:-=+*#%@";
 
-    function paintAll(x) {
+    // force = true rewrites every pixel even if its level is unchanged. The
+    // dirty-skip is a big saving during a run, but it also means a repaint
+    // cannot be requested for its own sake, which is what Clear needs.
+    function paintAll(x, force) {
         var painted = 0;
         if (PAINT_MODE === "chars") {
+            // Two characters per pixel: Courier advances 0.6 em, so doubling
+            // makes the drawing come out roughly square instead of squashed.
             for (var r = 0; r < GRID; r++) {
                 var s = "";
                 for (var c = 0; c < GRID; c++) {
                     var u = (x[r * GRID + c] + 1) * 0.5;
                     var q = Math.floor(u * (RAMP.length - 1) + 0.5);
                     if (q < 0) q = 0; else if (q > RAMP.length - 1) q = RAMP.length - 1;
-                    s += RAMP.charAt(RAMP.length - 1 - q);
+                    var ch = RAMP.charAt(RAMP.length - 1 - q);
+                    s += ch + ch;
                 }
                 var f = field("row_" + r);
                 if (f) { f.value = s; painted++; }
@@ -257,13 +281,50 @@ try {
             if (lvl < 0) lvl = 0; else if (lvl > LEVELS - 1) lvl = LEVELS - 1;
             // Invert so a high value reads as dark ink on a light page.
             lvl = LEVELS - 1 - lvl;
-            if (lvl !== LAST[i]) {
+            if (force || lvl !== LAST[i]) {
                 paintPixel(i, lvl);
                 LAST[i] = lvl;
                 painted++;
             }
         }
         return painted;
+    }
+
+    // Blank the grid. Also the honest way to tell whether painting works at
+    // all: if Clear does not visibly wipe the picture, no fillColor write is
+    // reaching the screen and the problem is the paint path, not the model.
+    function dsClear() {
+        if (!PX) initPaint();
+        for (var i = 0; i < NPIX; i++) {
+            paintPixel(i, LEVELS - 1);
+            LAST[i] = LEVELS - 1;
+        }
+        if (PAINT_MODE === "chars") {
+            for (var r = 0; r < GRID; r++) {
+                var f = field("row_" + r);
+                if (f) f.value = "";
+            }
+        }
+        S = null;
+        var st = field("status");
+        if (st) st.value = "cleared";
+        say("cleared. if the picture did not go blank, fillColor is not");
+        say("repainting in this viewer -- try the Nudge button.");
+    }
+
+    // Cycle the repaint strategy at runtime. Whether a viewer needs a nudge,
+    // and which one, is not something that can be settled without a viewer, so
+    // this makes it a click rather than a rebuild.
+    function dsNudge() {
+        var order = ["none", "caption", "display", "value"];
+        var at = 0;
+        for (var i = 0; i < order.length; i++) if (order[i] === NUDGE) at = i;
+        NUDGE = order[(at + 1) % order.length];
+        say("repaint nudge: " + NUDGE + " -- redrawing");
+        var st = field("status");
+        if (st) st.value = "nudge = " + NUDGE;
+        if (S && S.x) paintAll(S.x, true);
+        else dsClear();
     }
 
     // ------------------------------------------------------------------
@@ -478,7 +539,7 @@ try {
         }
         say(steps + " steps, guidance " + guidance + ", seed " + seed);
 
-        paintAll(S.x);
+        paintAll(S.x, true);
         statusLine();
         dsPump();
     }
@@ -556,7 +617,7 @@ try {
             label: '"' + found.word + '"', msPerStep: 0, t0: Date.now()
         };
         say('stepping "' + found.word + '" -- click Step to advance');
-        paintAll(S.x);
+        paintAll(S.x, true);
         statusLine();
     }
 
@@ -614,12 +675,29 @@ try {
         TIMER_MODE = "SYNC";
     }
 
+    // Boot diagnostic. "Nothing appears" has two very different causes -- the
+    // widgets not resolving at all, versus resolving but not repainting -- and
+    // guessing between them from the outside costs a rebuild each time.
+    initPaint();
+    var resolved = 0, canFill = false;
+    for (var q = 0; q < NPIX; q++) if (PX[q]) resolved++;
+    try {
+        if (PX[0]) { PX[0].fillColor = ["G", 1]; canFill = true; }
+    } catch (e) { canFill = false; }
+
     say("=== diffusion.pdf ===");
     say("a diffusion model, running in this document. no network.");
     say("");
     say(GRID + "x" + GRID + ", " + (nbytes / 1024).toFixed(0) + " kB of int8 weights, " +
         ABAR.length + " trained steps");
-    say("scheduler: " + TIMER_MODE);
+    say("scheduler: " + TIMER_MODE + ", paint: " + PAINT_MODE + ", nudge: " + NUDGE);
+    say("widgets resolved: " + resolved + "/" + NPIX +
+        ", fillColor assignable: " + canFill);
+    if (resolved === 0) {
+        say("!! getField cannot see the pixel widgets. Nothing can paint.");
+    } else if (!canFill) {
+        say("!! this viewer rejects fillColor. Use the chars build instead.");
+    }
     say("");
     say("known words: " + CLASSES.join(", "));
     say("");
