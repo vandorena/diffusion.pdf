@@ -182,6 +182,19 @@ function main() {
     process.exit(2);
   }
 
+  // Are these even the same model? Comparing a freshly built payload against
+  // a reference from a previous train silently fails G3 as a numeric
+  // divergence, which sends you looking for a sampler bug that is not there.
+  if (ref.model_id && typeof ctx.dsModelId === "function") {
+    const got = ctx.dsModelId();
+    if (got !== ref.model_id) {
+      fail(`payload is model ${got} but the reference is for ${ref.model_id}.\n` +
+           `      Regenerate it:  python3 -m tools.reference --word ${ref.word} --seed ${ref.seed}`);
+      process.exit(1);
+    }
+    pass(`model fingerprint matches (${got})`);
+  }
+
   // G1 -- the PRNG stream. Shifts and xors only, so any difference is a
   // coercion bug and shows up here before anything else can mask it.
   if (ref.prng) {
@@ -245,7 +258,10 @@ function main() {
           const u = (ref.image[r * grid + c] + 1) * 0.5;
           let q = Math.floor(u * (RAMP.length - 1) + 0.5);
           q = Math.max(0, Math.min(RAMP.length - 1, q));
-          const ch = RAMP.charAt(RAMP.length - 1 - q);
+          // Not inverted: ink takes the dense end of the ramp, background
+          // stays blank. Must match src/diffusion.js exactly, or this gate
+          // certifies whatever the payload happens to do.
+          const ch = RAMP.charAt(q);
           want += ch + ch;
         }
         if (got !== want) { wrong++; if (firstWrong < 0) firstWrong = r; }

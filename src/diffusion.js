@@ -11,6 +11,7 @@ try {
     // Box-Muller, and why the schedule arrives as decimal literals computed
     // offline.
 
+    var MODEL_ID = "__MODEL_ID__";
     var GRID = __GRID__;
     var NPIX = GRID * GRID;
     var LEVELS = __LEVELS__;
@@ -93,6 +94,39 @@ try {
     function seedFor(word, seed) {
         var combined = (djb2(word) ^ (seed >>> 0)) >>> 0;
         return combined === 0 ? 0x9E3779B9 : combined;
+    }
+
+    // The clock is the only entropy a PDF sandbox reliably offers, and it is
+    // already known to be there -- dsPump budgets its chunks with it. The
+    // timestamp goes through djb2 rather than being used raw because xorshift32
+    // correlates in its first few outputs for nearby seeds, and x_T only ever
+    // draws 784 of them. The tick separates two clicks inside one millisecond.
+    var SEED_TICK = 0;
+    function freshSeed() {
+        SEED_TICK = (SEED_TICK + 1) % 1000;
+        return djb2(String(Date.now()) + ":" + SEED_TICK) % 100000;
+    }
+
+    // The seed field takes a number, or "auto" for a different picture on every
+    // click. Auto deliberately leaves the word "auto" in the field rather than
+    // writing the number back -- otherwise the next click would reuse it and
+    // the variation would stop after one press. The number it chose is written
+    // to the console instead, so a drawing you like is still reproducible: read
+    // the seed off the console and type it into the field.
+    //
+    // Nothing here is on the verified path. The harness calls dsTrajectory,
+    // dsInitialNoise and dsPrngStream with an explicit seed and never reads a
+    // field, so the sampler stays exactly as deterministic as it was.
+    function seedFromField() {
+        var f = field("seedInput");
+        var raw = f ? String(f.value) : String(DEF_SEED);
+        var text = raw.replace(/^\s+/, "").replace(/\s+$/, "").toLowerCase();
+        if (text === "" || text === "auto" || text === "random" ||
+            text === "rand" || text === "?") {
+            return { value: freshSeed(), auto: true };
+        }
+        var seed = parseInt(text, 10);
+        return { value: isNaN(seed) ? DEF_SEED : seed, auto: false };
     }
 
     var NORM_SHIFT = 32 - Math.round(Math.log(NORM_BINS) / Math.LN2);
@@ -261,13 +295,20 @@ try {
         if (PAINT_MODE === "chars") {
             // Two characters per pixel: Courier advances 0.6 em, so doubling
             // makes the drawing come out roughly square instead of squashed.
+            //
+            // No inversion here, unlike the grey path. The grey grid flips
+            // because ink is a high value and has to paint *dark* on a white
+            // page; text is already dark on white, so ink takes the dense end
+            // of the ramp and background stays blank. Inverting both was a
+            // bug: it filled the page with '@' and carved the drawing out in
+            // whitespace -- a negative of the intended image.
             for (var r = 0; r < GRID; r++) {
                 var s = "";
                 for (var c = 0; c < GRID; c++) {
                     var u = (x[r * GRID + c] + 1) * 0.5;
                     var q = Math.floor(u * (RAMP.length - 1) + 0.5);
                     if (q < 0) q = 0; else if (q > RAMP.length - 1) q = RAMP.length - 1;
-                    var ch = RAMP.charAt(RAMP.length - 1 - q);
+                    var ch = RAMP.charAt(q);
                     s += ch + ch;
                 }
                 var f = field("row_" + r);
@@ -350,7 +391,28 @@ try {
     }
 
     function lookupClass(word) {
-        var clean = normaliseWord(word);
+        // Emoji first, against the raw input. normaliseWord keeps only letters
+        // and would delete them outright. U+FE0F is stripped so the bare glyph
+        // and its emoji-presentation form both match. The table reaches the
+        // document as \uXXXX escapes, which keeps the payload 7-bit ASCII.
+        // U+FE0F written as an escape, not as itself: a literal variation
+        // selector here would make the payload non-ASCII, and pdfrw would then
+        // write the whole thing as UTF-16 hex at twice the size.
+        var raw = String(word == null ? "" : word).replace(/\uFE0F/g, "");
+        raw = raw.replace(/^\s+|\s+$/g, "");
+        var direct = indexOfClass(raw);
+        if (direct >= 0) return { cls: direct, how: "exact", word: CLASSES[direct] };
+        // Surrogate pairs are two UTF-16 units, so step by codepoint.
+        for (var p = 0; p < raw.length;) {
+            var cp = raw.charCodeAt(p);
+            var size = (cp >= 0xD800 && cp <= 0xDBFF && p + 1 < raw.length) ? 2 : 1;
+            var glyph = raw.substr(p, size);
+            var hitE = indexOfClass(glyph);
+            if (hitE >= 0) return { cls: hitE, how: "emoji", word: CLASSES[hitE] };
+            p += size;
+        }
+
+        var clean = normaliseWord(raw);
         if (clean === "") return { cls: 0, how: "empty", word: CLASSES[0] };
 
         var tries = [clean];
@@ -504,8 +566,7 @@ try {
         if (!PX) initPaint();
 
         var word = (field("wordInput") || { value: DEF_WORD }).value || DEF_WORD;
-        var seed = parseInt((field("seedInput") || { value: DEF_SEED }).value, 10);
-        if (isNaN(seed)) seed = DEF_SEED;
+        var sd = seedFromField(), seed = sd.value;
         var steps = parseInt((field("stepsInput") || { value: DEF_STEPS }).value, 10);
         if (isNaN(steps) || steps < 1) steps = DEF_STEPS;
         var guidance = parseFloat((field("guidanceInput") || { value: DEF_GUIDANCE }).value);
@@ -537,7 +598,8 @@ try {
             say('drawing "' + found.word + '"' +
                 (found.how === "token" ? " (matched one word of it)" : ""));
         }
-        say(steps + " steps, guidance " + guidance + ", seed " + seed);
+        say(steps + " steps, guidance " + guidance + ", seed " + seed +
+            (sd.auto ? " (auto -- type it in to get this picture back)" : ""));
 
         paintAll(S.x, true);
         statusLine();
@@ -604,8 +666,7 @@ try {
         if (!SCRATCH) allocScratch();
         if (!PX) initPaint();
         var word = (field("wordInput") || { value: DEF_WORD }).value || DEF_WORD;
-        var seed = parseInt((field("seedInput") || { value: DEF_SEED }).value, 10);
-        if (isNaN(seed)) seed = DEF_SEED;
+        var sd = seedFromField(), seed = sd.value;
         var steps = parseInt((field("stepsInput") || { value: DEF_STEPS }).value, 10);
         if (isNaN(steps) || steps < 1 || (ABAR.length % steps)) steps = DEF_STEPS;
         var guidance = parseFloat((field("guidanceInput") || { value: DEF_GUIDANCE }).value);
@@ -616,7 +677,8 @@ try {
             i: 0, ts: timesteps(steps), cls: found.cls, guidance: guidance,
             label: '"' + found.word + '"', msPerStep: 0, t0: Date.now()
         };
-        say('stepping "' + found.word + '" -- click Step to advance');
+        say('stepping "' + found.word + '" at seed ' + seed +
+            " -- click Step to advance");
         paintAll(S.x, true);
         statusLine();
     }
@@ -624,6 +686,8 @@ try {
     // ------------------------------------------------------------------
     // hooks the verification harness calls; unused inside the document
     // ------------------------------------------------------------------
+
+    function dsModelId() { return MODEL_ID; }
 
     function dsPrngStream(seed, n) {
         var rng = new Rng(seed), out = [];
@@ -699,8 +763,12 @@ try {
         say("!! this viewer rejects fillColor. Use the chars build instead.");
     }
     say("");
-    say("known words: " + CLASSES.join(", "));
-    say("");
+    // Not the list itself. 131 categories is one 1,100-character line in an
+    // 11pt field, so it printed as a truncated fragment and cost a twelfth of
+    // the scrollback; the full list is static text on page 2.
+    say("all " + CLASSES.length + " known words are listed on page 2.");
     say("Type one and press Generate. Step advances one denoising step.");
     say("Anything unknown maps to the nearest known object, and says so.");
+    say('Seed "auto" draws a new picture every click. The number it used');
+    say("is printed here -- type it back in to draw that one again.");
 } catch (e) { app.alert(e.stack || e); }

@@ -48,6 +48,70 @@ Two further corrections fell out of building it:
   and `Int8Array`. The Chromium target is a modern V8, so typed arrays are
   available and asm.js is unnecessary.
 
+## Tuning: what is worth changing, in order
+
+Measured with a reference classifier trained on the real drawings, scoring the
+fraction of samples it assigns to the category that was asked for. That
+classifier gets **0.921 on real Quick, Draw! data**, which is the number to
+compare against -- not 1.0.
+
+**Guidance is the dominant knob, and more sampling steps do not help.**
+
+| | cfg 1.0 | cfg 1.5 | cfg 2.5 | cfg 4.0 |
+|---|---|---|---|---|
+| 8 steps | 0.703 | 0.891 | **0.969** | 0.969 |
+| 16 steps | 0.641 | 0.891 | 0.938 | 0.969 |
+| 32 steps | 0.625 | 0.859 | 0.938 | 0.969 |
+
+Both defaults moved as a result: **8 steps, guidance 2.5**. That is better than
+the old 16/1.5 on every axis at once -- more recognisable, edge statistics
+closer to the real data, and half the compute in the viewer.
+
+Two things worth understanding about that table:
+
+- **Steps are not free quality.** Going 8 -> 32 makes samples slightly *worse*
+  and slightly noisier. DDIM with a strided subset of 64 trained timesteps does
+  not benefit from finer stepping here, and the extra passes only give
+  quantisation error more opportunities to accumulate.
+- **Past cfg 2.5 the metric lies.** Accuracy keeps climbing to 0.969 at cfg 4.0
+  while the samples visibly collapse toward one prototype per class. Scoring
+  only classifier accuracy would pick the worse model; sharpness and a look at
+  the pictures are what stop that.
+
+Above the real-data score the model is producing drawings that are *more*
+canonical than real human doodles. At that point "accuracy" is no longer the
+thing to optimise, and the remaining gains are in how the drawing looks, not
+what it is.
+
+### Training changes, measured
+
+| change | class-accuracy | note |
+|---|---|---|
+| 80 epochs, 4k/class, no EMA | 0.961 +/- 0.012 | |
+| **140 epochs, 6k/class, EMA 0.999** | **0.973 +/- 0.010** | current |
+
+EMA is worth having and costs nothing at inference -- the averaged weights are
+what gets quantised and shipped -- but the gain is about one point, not a
+transformation. A first comparison at 96 samples per model showed EMA *losing*;
+that was noise. Anything under roughly 5 points needs a few hundred samples
+before it means anything.
+
+### What the remaining errors actually are
+
+At 256 samples per model, nearly all the misses are **categories that genuinely
+collide at 28x28**, not model failures:
+
+| category | mistaken for |
+|---|---|
+| mushroom | tree -- stalk under a canopy is the same silhouette |
+| banana | moon -- a crescent is a crescent |
+| bird | airplane, scissors -- a V-shape with two wings |
+| lightning | sword, flower -- a zigzag stroke |
+
+Two of those are pure category-selection mistakes on my part. Replacing one of
+each colliding pair is a larger accuracy win than any amount of extra training,
+and costs a retrain rather than a redesign.
+
 ## What actually decided sample quality
 
 Capacity, by a wide margin. The same architecture, schedule and training recipe,

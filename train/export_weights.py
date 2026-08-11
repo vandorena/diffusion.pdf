@@ -219,8 +219,6 @@ def lookup_class(model, word):
     one that says it guessed.
     """
     classes, synonyms = model["classes"], model.get("synonyms", {})
-    clean = "".join(c for c in word.lower().strip() if c.isalpha() or c == " ")
-    clean = " ".join(clean.split())
 
     def direct(w):
         if not w:
@@ -230,6 +228,21 @@ def lookup_class(model, word):
         if w in synonyms and synonyms[w] in classes:
             return classes.index(synonyms[w])
         return None
+
+    # Emoji first, on the raw input: the normalisation below keeps only letters
+    # and would delete them entirely. U+FE0F is stripped so the bare glyph and
+    # its emoji-presentation form both match.
+    raw = word.strip().replace("️", "")
+    hit = direct(raw)
+    if hit is not None:
+        return hit, "emoji" if not raw.isascii() else "exact"
+    for ch in raw:
+        hit = direct(ch)
+        if hit is not None:
+            return hit, "emoji"
+
+    clean = "".join(c for c in raw.lower() if c.isalpha() or c == " ")
+    clean = " ".join(clean.split())
 
     candidates = [clean]
     if clean.endswith("s") and not clean.endswith("ss"):

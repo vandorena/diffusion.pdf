@@ -1,0 +1,1603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diffusion.pdf; a PDF that draws Pictures</title>
+<meta name="description" content="A standalone PDF containing a 55-million-parameter denoising diffusion model. Type a word, press Generate, and it draws — in the PDF viewer's own JavaScript engine, with no network and no plugin.">
+<meta name="color-scheme" content="light">
+<meta property="og:type" content="website">
+<meta property="og:title" content="diffusion.pdf — a PDF that draws pictures">
+<meta property="og:description" content="A standalone PDF containing a 55-million-parameter denoising diffusion model. Type a word, press Generate, and it draws — with no network and no plugin.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FFFDF7'/%3E%3Cpath d='M0 9h32M0 16h32M0 23h32' stroke='%23BBD4E8' stroke-width='1.5'/%3E%3Cpath d='M7 0v32' stroke='%23E8695D' stroke-width='1.5'/%3E%3Cg fill='%231F2328'%3E%3Crect x='13' y='10' width='4' height='4'/%3E%3Crect x='21' y='10' width='4' height='4'/%3E%3Crect x='17' y='14' width='4' height='4'/%3E%3Crect x='13' y='18' width='4' height='4'/%3E%3Crect x='21' y='18' width='4' height='4'/%3E%3C/g%3E%3C/svg%3E">
+
+<style>
+/* ===========================================================================
+   THE SHEET
+   One number governs this whole page: --line. The paper's ruling repeats on
+   it, every line box is exactly it, and every vertical margin is a multiple
+   of it. That is what keeps the writing sitting on the lines.
+   =========================================================================== */
+:root{
+  --line:30px;              /* the ruling period. everything derives from it. */
+  --rule-y:26px;            /* where in the band the rule sits: 4px below the
+                               baseline of an 18px serif in a 30px line box, so
+                               the writing rides just above the line rather
+                               than sitting on it */
+  --margin-w:210px;         /* the paper's left margin, holding the quicklinks */
+  --sheet-w:1060px;
+  --measure:42rem;
+
+  --desk:#34383F;
+  --paper:#FFFDF7;
+  --paper-edge:#EDE8DC;
+  --rule:#BBD4E8;
+  --margin-rule:#E8695D;
+  --ink:#1F2328;
+  --ink-strong:#101319;
+  --muted:#63697A;
+  --link:#1B5FA8;
+  --slip:#F5F4EE;           /* pasted-in slips: code, tables, diagrams */
+  --slip-edge:#DCD8CC;
+
+  --t-c:#6B7280; --t-s:#1F6B45; --t-k:#A61B1F;
+  --t-n:#8A4C00; --t-f:#1B4F9C; --t-p:#55524B;
+
+  --serif:"Times New Roman",Times,"Liberation Serif","Nimbus Roman",
+          "Tinos",serif;
+  --mono:ui-monospace,"Cascadia Mono",SFMono-Regular,"SF Mono",Consolas,
+         "Liberation Mono",monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--desk);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-size:18px;
+  line-height:var(--line);
+  -webkit-font-smoothing:antialiased;
+}
+
+a{color:var(--link);text-underline-offset:.16em}
+:focus-visible{outline:2px solid var(--margin-rule);outline-offset:2px}
+::selection{background:#FFE9A8;color:#101319}
+
+.skip{
+  position:absolute;left:-9999px;top:0;z-index:100;
+  background:var(--ink-strong);color:var(--paper);
+  padding:.6rem 1rem;font-family:var(--mono);
+}
+.skip:focus{left:0}
+
+/* --------------------------------------------------------------- the sheet */
+.sheet{
+  position:relative;
+  max-width:var(--sheet-w);
+  margin:var(--line) auto calc(var(--line) * 2);
+  background-color:var(--paper);
+  box-shadow:0 1px 2px rgba(0,0,0,.28), 0 18px 40px -18px rgba(0,0,0,.55);
+}
+/* the red margin rule, drawn over everything including the masthead */
+.sheet::after{
+  content:"";position:absolute;z-index:3;
+  top:0;bottom:0;left:var(--margin-w);width:2px;
+  background:var(--margin-rule);
+}
+/* ring-binder holes punched down the left edge, showing the desk through */
+.sheet::before{
+  content:"";position:absolute;z-index:2;
+  top:0;bottom:0;left:26px;width:18px;
+  background-image:radial-gradient(circle at 9px 60px,
+    var(--desk) 8px,var(--paper-edge) 8px,transparent 9.5px);
+  background-size:18px calc(var(--line) * 4);
+  background-repeat:repeat-y;
+}
+
+/* ------------------------------------------------------------- the heading */
+/* opaque paper, so the ruling stops where the title sits - as on a real page */
+.sheet-head{
+  position:relative;z-index:1;
+  background:var(--paper);
+  padding:var(--line) 60px 0 calc(var(--margin-w) + 36px);
+  border-bottom:1px solid var(--paper-edge);
+}
+/* the title is set to fill the writing column, not to sit in a short block:
+   it grows with the sheet and wraps only when it runs out of paper */
+h1{
+  margin:0;
+  font-size:clamp(32px,5.2vw,54px);line-height:1.12;
+  font-weight:700;letter-spacing:-.02em;
+  color:var(--ink-strong);
+  max-width:none;
+}
+h1 .sub{display:inline}
+/* the sparkles flank the word without joining it - set smaller than the
+   title and nudged up, so they read as marks in the margin of the line */
+h1 .spark{
+  display:inline-block;
+  font-size:.64em;line-height:1;
+  vertical-align:.36em;
+  margin:0 .16em;
+  filter:grayscale(1);
+}
+/* the rule under "Pictures" is drawn rather than typed: it wipes in from the
+   right, holds, then wipes out to the left, over and over - the same gesture
+   the hover underline makes, running on its own */
+/* the word itself catches a little light as the rule is drawn: a pale band
+   painted into the letterforms, crossing left-to-right as the wipe comes in */
+h1 u{
+  position:relative;display:inline-block;
+  text-decoration:none;
+  background-image:linear-gradient(100deg,
+    var(--ink-strong) 0 44%,
+    #7C8496 50%,
+    var(--ink-strong) 56% 100%);
+  background-size:300% 100%;
+  background-position:0 0;
+  background-repeat:no-repeat;
+  -webkit-background-clip:text;background-clip:text;
+  color:transparent;-webkit-text-fill-color:transparent;
+  animation:slop-glint 4s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes slop-glint{
+  0%       {background-position:0 0}
+  30%,100% {background-position:100% 0}
+}
+h1 u::after{
+  content:"";position:absolute;
+  left:-.09em;right:-.09em;bottom:.11em;height:3px;
+  background:var(--ink-strong);
+  transform:scaleX(0);transform-origin:right;
+  animation:slop-rule 4s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes slop-rule{
+  0%       {transform:scaleX(0);transform-origin:right}
+  30%      {transform:scaleX(1);transform-origin:right}
+  50%      {transform:scaleX(1);transform-origin:left}
+  80%,100% {transform:scaleX(0);transform-origin:left}
+}
+.head-lede{
+  margin:var(--line) 0 0;
+  font-size:20px;line-height:var(--line);
+  color:var(--muted);
+  max-width:none;
+}
+.head-cta{margin:var(--line) 0 calc(var(--line) / 4);display:flex;
+          flex-wrap:wrap;gap:12px;align-items:center}
+.btn{
+  display:inline-flex;align-items:center;gap:.55rem;
+  height:calc(var(--line) * 1.5);
+  padding:0 22px;
+  background:var(--ink-strong);color:var(--paper);
+  border:1px solid var(--ink-strong);
+  font-family:var(--mono);font-size:13px;letter-spacing:.06em;
+  text-decoration:none;
+}
+.btn:hover{background:transparent;color:var(--ink-strong)}
+.btn-2{
+  background:transparent;color:var(--ink-strong);
+  border:1px solid var(--slip-edge);
+}
+.btn-2:hover{background:transparent;border-color:var(--ink-strong)}
+.head-note{
+  margin:calc(var(--line) / 2) 0 0;
+  font-family:var(--mono);font-size:11px;line-height:var(--line);
+  letter-spacing:.04em;color:var(--muted);
+}
+
+/* --------------------------------------------------- margin + writing area */
+/* The ruling is anchored HERE, not on the sheet, and this is the whole reason
+   the writing lands on the lines. The masthead's height depends on how its
+   text wraps, so it is not a multiple of --line - ruling the sheet from its
+   very top would push every line below out of register by whatever remainder
+   the masthead happened to have. Starting the bands where the writing starts
+   makes the alignment structural instead of a coincidence. */
+.sheet-grid{
+  display:grid;
+  grid-template-columns:var(--margin-w) minmax(0,1fr);
+  background-image:linear-gradient(
+    to bottom,
+    transparent 0 var(--rule-y),
+    var(--rule) var(--rule-y) calc(var(--rule-y) + 1px),
+    transparent calc(var(--rule-y) + 1px) var(--line));
+  background-size:100% var(--line);
+}
+
+/* the quicklinks live in the paper's margin, left of the red rule */
+.sheet-margin{padding:var(--line) 18px calc(var(--line) * 2) 56px}
+/* written into the margin and left there. it does not track the viewport -
+   the contents belong to the sheet, and scroll away with it like anything
+   else written on the page */
+.quicklinks{position:static}
+.quicklinks h2{
+  margin:0 0 calc(var(--line) / 2);
+  font-family:var(--mono);font-size:10px;line-height:15px;
+  letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);
+}
+.quicklinks ol{list-style:none;margin:0;padding:0;counter-reset:ql}
+.quicklinks li{counter-increment:ql}
+.quicklinks a{
+  display:block;
+  font-size:14px;line-height:var(--line);
+  color:var(--muted);text-decoration:none;
+  text-indent:-18px;padding-left:18px;
+}
+.quicklinks ol a::before{
+  content:counter(ql) ".";
+  display:inline-block;width:18px;
+  font-family:var(--mono);font-size:11px;
+  color:var(--rule);
+}
+.quicklinks a:hover{color:var(--ink-strong);text-decoration:underline}
+.quicklinks a[aria-current="true"]{
+  color:var(--ink-strong);font-weight:700;
+}
+.quicklinks ol a[aria-current="true"]::before{content:"\27A4";color:var(--margin-rule)}
+.margin-out{
+  margin-top:var(--line);padding-top:calc(var(--line) / 2);
+  border-top:1px solid var(--paper-edge);
+}
+.margin-out a{
+  display:block;font-family:var(--mono);font-size:11px;line-height:20px;
+  color:var(--muted);text-decoration:none;
+}
+.margin-out a:hover{color:var(--ink-strong);text-decoration:underline}
+
+.sheet-body{
+  min-width:0;
+  padding:var(--line) 60px calc(var(--line) * 3) 36px;
+}
+.sheet-body > section > *{max-width:var(--measure)}
+/* the diagram and the wide tables are slips laid across the page, and are
+   allowed past the measure the prose keeps to */
+.sheet-body > section > .diagram,
+.sheet-body > section > .tw{max-width:none}
+
+/* ------------------------------------------------------- the writing, on grid
+   every rule below resolves to a whole multiple of --line, so a paragraph
+   after a table still lands on a ruled line.                                */
+section{display:flow-root}
+section + section{margin-top:var(--line)}
+/* A heading is set larger than the body, so its baseline sits lower in an
+   identical line box. It takes one whole band of padding to keep the block a
+   multiple of --line, then a visual nudge - which costs no height - to drop
+   its baseline back onto the rule the body text uses. */
+h2{
+  position:relative;top:-3px;
+  margin:calc(var(--line) * 2) 0 0;
+  padding-top:var(--line);
+  font-size:28px;line-height:var(--line);
+  font-weight:700;letter-spacing:-.015em;
+  color:var(--ink-strong);
+}
+section > h2:first-child{margin-top:0}
+/* the first heading on the page needs no band of air above it - the masthead
+   already provides it - so it starts one line higher. Still a whole band
+   removed, so everything below stays on its rule. */
+.sheet-body > section:first-of-type > h2:first-child{padding-top:0}
+h3{
+  margin:var(--line) 0 0;
+  font-size:21px;line-height:var(--line);
+  font-weight:700;
+  color:var(--ink-strong);
+}
+p{margin:0 0 var(--line)}
+strong{font-weight:700;color:var(--ink-strong)}
+
+ul.body,ol.body{margin:0 0 var(--line);padding-left:26px}
+ul.body li,ol.body li{margin:0;line-height:var(--line)}
+ul.body li::marker{color:var(--margin-rule)}
+ol.body li::marker{color:var(--muted);font-family:var(--mono);font-size:14px}
+
+/* ------------------------------------------------------------------ slips
+   code, tables and the diagram read as slips pasted onto the page. borders
+   are drawn with box-shadow so they add no height and never break the grid. */
+code{
+  font-family:var(--mono);font-size:.82em;line-height:1;
+  background:var(--slip);
+  box-shadow:0 0 0 1px var(--slip-edge);
+  padding:0 .3em;
+  color:var(--ink-strong);
+}
+
+/* Code is stuck on as note paper too, built exactly like .callout: the same
+   cut corner, the same lift, the same fraction of a degree. The note tone is
+   kept near-neutral rather than yellow so the syntax colours still read.
+   The caption already occupies one whole --line, so it doubles as the band of
+   adhesive across the top - no extra padding is needed to make it. */
+figure.code{
+  --note:#F6F2E6;
+  position:relative;
+  margin:var(--line) 0;
+  background-color:transparent;
+  background-image:
+    linear-gradient(to bottom,
+      rgba(16,19,25,.045) 0 var(--line),
+      transparent var(--line)),
+    linear-gradient(315deg,
+      transparent 0 14.15px,
+      var(--note) 14.15px);
+  filter:drop-shadow(0 1px 0 rgba(16,19,25,.10))
+         drop-shadow(0 3px 5px rgba(16,19,25,.10));
+  transform:rotate(.3deg);
+}
+figure.code:nth-of-type(even){transform:rotate(-.4deg)}
+/* the underside of the fold, as on a callout */
+figure.code::after{
+  content:"";position:absolute;right:0;bottom:0;
+  width:20px;height:20px;
+  background:linear-gradient(315deg,
+    transparent 0 50%,
+    rgba(16,19,25,.13) 50% 100%);
+}
+/* the band of adhesive is bare paper - one whole line of it, so the note keeps
+   its height and the writing below stays on the ruling. 15 + 15 on the pre is
+   the second whole line. */
+figure.code pre{
+  margin:0;padding:calc(var(--line) + 15px) 16px 15px;
+  overflow-x:auto;
+  font-family:var(--mono);font-size:14px;line-height:var(--line);
+  color:var(--ink);tab-size:2;
+}
+figure.code pre code{background:none;box-shadow:none;padding:0;
+                     font-size:inherit;color:inherit}
+.t-c{color:var(--t-c);font-style:italic}
+.t-s{color:var(--t-s)}
+.t-k{color:var(--t-k);font-weight:600}
+.t-n{color:var(--t-n)}
+.t-f{color:var(--t-f)}
+.t-p{color:var(--t-p)}
+
+/* the svg is given a fixed height in whole lines, so it cannot drift */
+.diagram{
+  margin:var(--line) 0;padding:15px 16px;
+  background:var(--slip);
+  box-shadow:0 0 0 1px var(--slip-edge),2px 2px 0 rgba(0,0,0,.05);
+  overflow-x:auto;
+}
+/* the box is a whole number of lines tall, always, so the ruling underneath
+   never drifts; the drawing scales to fit inside it. below --min it stops
+   shrinking and the slip scrolls instead, so the labels stay legible. */
+.diagram svg{display:block;height:calc(var(--line) * 9);width:100%;
+             min-width:620px}
+.d-box{fill:var(--paper);stroke:var(--ink);stroke-width:1.5}
+.d-box-2{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.d-loop{fill:none;stroke:var(--slip-edge);stroke-width:1.5;
+        stroke-dasharray:5 4}
+.d-title{fill:var(--ink-strong);font:700 15px var(--serif)}
+.d-sub{fill:var(--muted);font:400 11px var(--mono)}
+.d-lbl{fill:var(--ink);font:400 11px var(--mono)}
+.d-arrow{stroke:var(--ink);stroke-width:1.4;fill:none}
+.d-arrow-r{stroke:var(--margin-rule)}
+.d-arrow-b{stroke:var(--link)}
+
+.tw{
+  margin:var(--line) 0;overflow-x:auto;
+  background:var(--slip);
+  box-shadow:0 0 0 1px var(--slip-edge),2px 2px 0 rgba(0,0,0,.05);
+}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{
+  text-align:left;padding:0 14px;
+  line-height:var(--line);
+  box-shadow:inset 0 -1px 0 var(--slip-edge);
+  vertical-align:top;
+}
+thead th{
+  font-family:var(--mono);font-size:11px;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);
+  box-shadow:inset 0 -1px 0 var(--ink);
+}
+tbody tr:last-child td{box-shadow:none}
+td code{white-space:nowrap}
+td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
+
+/* ---------------------------------------------------------------- callouts
+   Slips of note paper stuck onto the sheet: no border, a shadow that lifts
+   them off the page, a darker band of adhesive across the top and a corner
+   that has started to peel. Rotated a fraction of a degree - a transform
+   costs no layout, so the ruling underneath is untouched.
+   40 + 20 padding = two lines, so these stay whole multiples too - the air is
+   simply weighted to the top, where the writing starts */
+.callout{
+  --note:#FBF3C2;           /* the default pad: very light yellow */
+  --note-ink:#7A5B00;
+  position:relative;
+  margin:var(--line) 0;padding:40px 20px 20px;
+  /* The corner is cut out of the paper itself, not painted over: the note is
+     filled by a gradient that stops short of the bottom-right, so the sheet
+     shows through. It has to be done this way round - clip-path is applied
+     AFTER filter, so clipping the corner would clip the shadow off with it,
+     and box-shadow would draw a full rectangle ignoring the cut. A gradient
+     leaves a genuinely transparent corner, and drop-shadow traces it.
+     14.15px along the 315deg axis = a 20px x 20px triangle. */
+  background-color:transparent;
+  background-image:
+    linear-gradient(to bottom,
+      rgba(16,19,25,.045) 0 var(--line),
+      transparent var(--line)),
+    linear-gradient(315deg,
+      transparent 0 14.15px,
+      var(--note) 14.15px);
+  filter:drop-shadow(0 1px 0 rgba(16,19,25,.10))
+         drop-shadow(0 3px 5px rgba(16,19,25,.10));
+  transform:rotate(-.35deg);
+}
+.callout:nth-of-type(even){transform:rotate(.4deg)}
+/* the underside of the fold: one flat tone, turned back on itself */
+.callout::after{
+  content:"";position:absolute;right:0;bottom:0;
+  width:20px;height:20px;
+  background:linear-gradient(315deg,
+    transparent 0 50%,
+    rgba(16,19,25,.13) 50% 100%);
+}
+.callout > :last-child{margin-bottom:0}
+/* a note ending a section needs no margin of its own - the gap between
+   sections already supplies the air, and doubling it opens a hole */
+.callout:last-child{margin-bottom:0}
+.callout .label{
+  margin:0;
+  font-family:var(--mono);font-size:11px;line-height:var(--line);
+  letter-spacing:.14em;text-transform:uppercase;
+  color:var(--note-ink);
+}
+.callout.warn{--note:#FBE1DC;--note-ink:#9E2B20}   /* very light red */
+.callout.tip {--note:#E4F1DD;--note-ink:#2A6B3F}   /* very light green */
+
+.vocab{
+  font-family:var(--mono);font-size:14px;line-height:var(--line);
+  color:var(--ink);
+  -webkit-hyphens:none;hyphens:none;
+}
+.vocab{word-spacing:.06em}
+.foot{
+  margin-top:calc(var(--line) * 2);padding-top:var(--line);
+  border-top:1px solid var(--paper-edge);
+  font-family:var(--mono);font-size:12px;line-height:var(--line);
+  color:var(--muted);
+}
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width:1120px){
+  :root{--sheet-w:100%}
+  .sheet{margin-left:16px;margin-right:16px}
+}
+@media (max-width:860px){
+  /* the margin folds to the top of the page and the quicklinks sit across it */
+  :root{--margin-w:0px}
+  .sheet::before,.sheet::after{display:none}
+  .sheet-head{padding:var(--line) 24px 0}
+  .sheet-grid{grid-template-columns:minmax(0,1fr)}
+  .sheet-margin{
+    padding:var(--line) 24px 0;
+    border-bottom:1px solid var(--paper-edge);
+  }
+  .quicklinks{position:static}
+  .quicklinks ol{
+    display:flex;flex-wrap:wrap;column-gap:18px;
+  }
+  .quicklinks a{text-indent:0;padding-left:0}
+  .quicklinks a::before{width:auto;margin-right:4px}
+  .margin-out{display:flex;gap:18px;flex-wrap:wrap}
+  .sheet-body{padding:var(--line) 24px calc(var(--line) * 2)}
+}
+@media (max-width:520px){
+  .sheet{margin-left:0;margin-right:0}
+  h2{font-size:25px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  h1 u{animation:none;background-image:none;
+       color:var(--ink-strong);-webkit-text-fill-color:currentColor}
+  h1 u::after{animation:none;transform:scaleX(1)}
+}
+
+@media print{
+  body{background:#fff}
+  .sheet{box-shadow:none;max-width:none;margin:0}
+  .sheet-margin{display:none}
+  .sheet-grid{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<article class="sheet">
+
+  <header class="sheet-head">
+    <div>
+      <h1>A PDF that draws <span class="sub">
+        <span class="spark" aria-hidden="true">&#10024;</span><u>Pictures</u><span class="spark" aria-hidden="true">&#10024;</span></span></h1>
+      <p class="head-lede">Type a word, press a button drawn on the page, and a
+        denoising diffusion model runs in the PDF viewer's own JavaScript
+        engine. No server, no plugin, nothing downloaded.</p>
+      <p class="head-cta">
+        <a class="btn" href="/diffusion.pdf">Download diffusion.pdf</a>
+        <a class="btn btn-2" href="#pdf-code">How it works</a>
+      </p>
+      <p class="head-note">75 MB &middot; 55,403,136 int8 weights &middot; opens in Chrome</p>
+    </div>
+  </header>
+
+  <div class="sheet-grid">
+
+    <!-- ------------------------------------------ the margin: quicklinks -->
+    <aside class="sheet-margin">
+      <nav class="quicklinks" aria-label="On this page">
+        <h2>Contents</h2>
+        <ol id="qlList"></ol>
+        <div class="margin-out">
+          <a href="https://github.com/vandorena/diffusion.pdf">github ↗</a>
+          <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf ↗</a>
+          <a href="https://quickdraw.withgoogle.com/data">quick, draw! ↗</a>
+          <a href="https://alexvd.dev/">alexvd.dev ↗</a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ------------------------------------------------- the written page -->
+    <main class="sheet-body" id="main">
+
+      <section id="overview" data-nav="Overview">
+        <h2>Overview</h2>
+
+        <p>You open a PDF. You type <code>octopus</code>. You press a button
+          drawn on the page. A few seconds later an octopus appears, drawn one
+          pixel at a time on the page itself.</p>
+
+        <p>Nothing was downloaded. There is no server, no plugin, no embedded
+          image of an octopus. The file contains <strong>55 million
+          numbers</strong> and a program, and the program runs inside your PDF
+          viewer.</p>
+
+        <p>This page explains how, from the bottom up.</p>
+
+        <div class="callout warn">
+          <p class="label">the honest ceiling</p>
+          <p>This maps a typed word to the nearest of <strong>131 known
+            objects</strong> and draws it. It is not open-vocabulary
+            generation. Typing <code>dinosaur</code> gets you a bus &mdash; and
+            the document tells you in its status line that it guessed.</p>
+        </div>
+      </section>
+
+      <section id="requirements" data-nav="Requirements">
+        <h2>Requirements</h2>
+
+        <ul class="body">
+          <li><strong>Chrome</strong>, or anything else built on
+            <strong>PDFium</strong>. That is the viewer whose JavaScript
+            implementation this targets.</li>
+          <li>Patience for a 75 MB download, and a little RAM.</li>
+          <li>No network connection. Genuinely &mdash; once the file is on your
+            disk it never talks to anything.</li>
+        </ul>
+
+        <p>Two builds exist. The <strong>character build</strong> paints the
+          drawing as text and is the one that works end to end today; the
+          <strong>colour-grid build</strong> paints 784 button backgrounds and
+          is blocked on a viewer bug (<a href="#unfinished">&sect;12</a>).</p>
+      </section>
+
+      <section id="pdf-code" data-nav="A PDF runs code">
+        <h2>A PDF can run code</h2>
+
+        <p>This is the part most people do not know, and everything else rests
+          on it.</p>
+
+        <p>PDF is not only a page-description format. Since Acrobat 3 it has
+          carried a scripting layer, and viewers implement enough of it to be
+          interesting: a document can declare JavaScript that runs when a page
+          opens or when a widget is clicked.</p>
+
+        <p>Two mechanisms matter here. <strong>The page-open action:</strong> a
+          page object can carry an <code>/AA</code> ("additional actions")
+          dictionary, and its <code>/O</code> entry names an action to run when
+          the page is displayed. Ours is a <code>/JavaScript</code> action whose
+          <code>/JS</code> value is the entire program.</p>
+
+        <figure class="code" data-lang="fdf">
+<pre><code class="lang-fdf">2 0 obj
+&lt;&lt; /Type /Page
+   /AA &lt;&lt; /O &lt;&lt; /S /JavaScript /JS ( ...75 million characters... ) &gt;&gt; &gt;&gt;
+   /Annots [ ... 805 widgets ... ] &gt;&gt;</code></pre>
+        </figure>
+
+        <p><strong>Widget actions:</strong> form fields are annotations. Each
+          has its own <code>/AA</code>, whose <code>/U</code> entry fires on
+          mouse-up. Ours contain one expression each, e.g.
+          <code>dsBegin()</code>. Those functions were defined by the page-open
+          script and are still in scope, because a document shares one
+          JavaScript context for its whole session. The page-open action defines
+          the program; the buttons call into it.</p>
+
+        <p>The weights ride along inside that same <code>/JS</code> string as
+          base64. There is no separate resource, no attachment, no stream &mdash;
+          one enormous PDF literal string.
+          <code>builds/pythia-llm.pdf</code> in the repository is 51 MB of
+          exactly this, so the approach is known to scale.</p>
+
+        <div class="callout">
+          <p class="label">Note</p>
+          <p>This trick is inherited from
+            <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf</a>, which
+            this repository is a fork of, and before that from ading2210's
+            DoomPDF and LinuxPDF. What is new here is what the program
+            <em>does</em>.</p>
+        </div>
+      </section>
+
+      <section id="the-model" data-nav="The model">
+        <h2>What the program is</h2>
+
+        <p>A <strong>denoising diffusion model</strong>: the same family as
+          Stable Diffusion, five orders of magnitude smaller.</p>
+
+        <p>The idea is simpler than its reputation. Take a drawing, add a little
+          Gaussian noise, then more, then more, until after enough steps nothing
+          is left but noise. That destruction process is fixed and known. Now
+          train a network to undo one step of it: given a noisy image and a
+          number saying <em>how</em> noisy, predict what was added.</p>
+
+        <p>Once you have that, you can generate. Start from pure noise &mdash;
+          which costs nothing, it is just random numbers &mdash; and repeatedly
+          ask the network to take one step back toward a clean image. After
+          enough steps you have a drawing that never existed. Ours is
+          <strong>class-conditional</strong>: the network also receives
+          <em>which of 131 objects</em> it should be denoising toward. That is
+          what makes typing a word do anything.</p>
+
+        <h3>The schedule</h3>
+
+        <p>The noise level at step <code>t</code> is described by
+          <code>abar[t]</code>, the fraction of the original signal still
+          present:</p>
+
+        <figure class="code">
+<pre><code>x_t = sqrt(abar[t]) * x_0  +  sqrt(1 - abar[t]) * noise</code></pre>
+        </figure>
+
+        <p><code>abar[0] = 0.9938</code> (nearly clean) down to
+          <code>abar[63] = 1.9e-9</code> (pure noise). The curve between them is
+          the <em>cosine schedule</em>, with one adjustment: the standard version
+          is calibrated for 32x32 images and up. At a coarser grid each pixel
+          carries more of the picture, so a given noise level destroys less, and
+          much of the schedule gets spent somewhere trivially easy. We divide the
+          signal-to-noise ratio by <code>(64/grid)^2</code>, which shifts the
+          whole schedule toward noisier. On 16x16 that single line moved class
+          accuracy from 0.978 to 0.995.</p>
+
+        <p>There are <strong>64 trained noise levels</strong>, not the usual
+          1000. Fewer levels means the timestep conditioning can be a lookup
+          table (<a href="#network">&sect;6</a>), and the shipped schedule is 64
+          numbers instead of a thousand.</p>
+
+        <h3>v-prediction</h3>
+
+        <p>The network could predict the noise that was added
+          (<code>eps</code>), the clean image (<code>x0</code>), or a particular
+          blend of the two called <code>v</code>:</p>
+
+        <figure class="code">
+<pre><code>v = sqrt(abar) * eps  -  sqrt(1 - abar) * x0</code></pre>
+        </figure>
+
+        <p>We predict <code>v</code>, and it is not a close call &mdash; measured
+          on an identical network and seed, class accuracy was <strong>0.978 for
+          v against 0.716 for eps</strong>.</p>
+
+        <p>The reason is worth understanding. At high noise <code>x_t</code> is
+          nearly pure noise, so <code>eps</code> is nearly <code>x_t</code>:
+          predicting it is almost the identity function, and the model burns
+          capacity learning to copy its input. Then recovering the image requires
+          dividing by <code>sqrt(abar)</code>, a number approaching zero, which
+          amplifies whatever error remains. <code>v</code> has bounded variance
+          across the whole schedule, and recovering <code>x0</code> from it is a
+          blend with no division at all.</p>
+
+        <h3>Sampling: DDIM</h3>
+
+        <p>Generation runs <strong>8 steps of DDIM with eta = 0</strong> &mdash;
+          fully deterministic. Each step asks the network for <code>v</code> at
+          the current noise level, derives the implied clean image
+          <code>x0</code> and <strong>clamps it to [-1, 1]</strong>, re-derives
+          the noise <code>eps</code> <strong>from the clamped x0</strong>, and
+          re-noises to the next, lower level.</p>
+
+        <figure class="code" data-lang="js">
+<pre><code class="lang-js">for (var j = 0; j &lt; NPIX; j++) {
+  var val = a * S.x[j] - bb * v[j];
+  if (val &lt; -1) val = -1; else if (val &gt; 1) val = 1;
+  x0[j] = val;
+}
+// eps is re-derived from the clipped x0, not taken from the model.
+for (j = 0; j &lt; NPIX; j++) {
+  var eps = (S.x[j] - a * x0[j]) / bb;
+  S.x[j] = ap * x0[j] + bp * eps;
+}</code></pre>
+        </figure>
+
+        <div class="callout warn">
+          <p class="label">the worst bug this project had</p>
+          <p>That re-derivation is not optional. DDIM's update assumes
+            <code>x_t = sqrt(abar)*x0 + sqrt(1-abar)*eps</code>. Clamping
+            <code>x0</code> while keeping the model's original <code>eps</code>
+            breaks the identity &mdash; the pair no longer describes the state
+            the sampler is actually in &mdash; and the error compounds. The x0
+            prediction began at correlation 1.000 with a correct drawing and
+            decayed to 0.368, producing noise whose mean and variance still
+            looked entirely reasonable. <strong>Every training metric was
+            healthy throughout.</strong></p>
+        </div>
+
+        <p>Determinism matters beyond reproducibility: it is what lets the whole
+          trajectory be checked against a reference implementation
+          (<a href="#verification">&sect;11</a>).</p>
+
+        <h3>Classifier-free guidance</h3>
+
+        <p>Each step actually runs the network <strong>twice</strong>: once told
+          the class, once told nothing (a dedicated null class the model was
+          trained on 10% of the time). The two are then extrapolated apart, with
+          <code>w = 2.5</code>:</p>
+
+        <figure class="code">
+<pre><code>v = v_null + w * (v_class - v_null)</code></pre>
+        </figure>
+
+        <p>This doubles the compute and is worth it: it moves class accuracy from
+          0.703 to 0.969. Past about 2.5 the metric keeps climbing while the
+          drawings visibly collapse toward a single prototype per class &mdash;
+          the accuracy number alone would pick a worse model.</p>
+      </section>
+
+      <section id="constraint" data-nav="The constraint">
+        <h2>The constraint that shapes everything</h2>
+
+        <p>The program has to produce <strong>the same numbers in the PDF viewer
+          as in numpy</strong>, or there is no way to know it is correct.</p>
+
+        <p>IEEE-754 requires <code>+</code>, <code>-</code>, <code>*</code>,
+          <code>/</code> and <code>sqrt</code> to be <em>correctly rounded</em>:
+          given the same inputs, every conforming implementation returns
+          bit-identical results. It requires nothing of the sort for
+          <code>log</code>, <code>exp</code>, <code>cos</code>, <code>pow</code>
+          or <code>tanh</code> &mdash; the ECMAScript spec explicitly permits
+          implementation-defined approximations, and V8's differ from numpy's in
+          the last bits.</p>
+
+        <p>So: <strong>nothing on the sampling path may call a transcendental
+          function.</strong> That one rule explains most of the model's more
+          unusual choices.</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Choice</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>ReLU</strong> everywhere</td>
+                <td><code>max(0,x)</code> is exact. SiLU measured slightly better
+                  but needs ~41,000 <code>Math.exp</code> calls per image</td>
+              </tr>
+              <tr>
+                <td><strong>Learned timestep table</strong>, not sinusoidal
+                  embeddings</td>
+                <td>no <code>sin</code>/<code>cos</code>. Cheaper too, and legal
+                  because DDIM only ever uses the 64 trained indices</td>
+              </tr>
+              <tr>
+                <td><strong>Inverse-CDF table</strong> for Gaussian noise</td>
+                <td>Box&ndash;Muller needs <code>log</code> and <code>cos</code>.
+                  A 2049-entry table plus linear interpolation is index
+                  arithmetic and one multiply-add</td>
+              </tr>
+              <tr>
+                <td><strong>xorshift32</strong> for randomness</td>
+                <td>shifts and xors only. No multiply that could exceed 2^53 and
+                  diverge between JS numbers and Python integers</td>
+              </tr>
+              <tr>
+                <td><strong>Schedule shipped as decimals</strong></td>
+                <td><code>cos</code> is called once, offline; the 64 resulting
+                  values are emitted as decimal literals that both languages
+                  parse identically</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>LayerNorm is allowed</strong>, which surprises people: mean,
+          variance, <code>sqrt</code> and divide are all correctly rounded, so it
+          is exact.</p>
+
+        <div class="callout tip">
+          <p class="label">the payoff</p>
+          <p>Verification asserts <em>equality</em>, not a tolerance. The one
+            place a tolerance survives is the trajectory comparison, and only
+            because numpy uses BLAS whose summation order differs from a naive JS
+            loop. Observed: <strong>3.5e-14</strong> over a full 8-step
+            trajectory.</p>
+        </div>
+      </section>
+
+      <section id="network" data-nav="The network">
+        <h2>The network</h2>
+
+        <p>A residual MLP, 2048 wide, six blocks. No convolutions
+          (<a href="#unfinished">&sect;12</a>).</p>
+
+        <div class="diagram">
+          <svg viewBox="0 0 900 270" role="img"
+               aria-label="The timestep and class are looked up in two embedding tables and summed into a 128-dimensional conditioning vector e. The noisy image enters a 2048-wide trunk, passes through six residual blocks that each re-inject e, and a final LayerNorm and output projection produce the predicted v.">
+            <defs>
+              <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#1F2328"/>
+              </marker>
+            </defs>
+
+            <!-- the conditioning vector: two lookups, no multiplies -->
+            <rect class="d-box-2" x="6" y="16" width="106" height="42"/>
+            <text class="d-title" x="59" y="42" text-anchor="middle">t (0..63)</text>
+
+            <rect class="d-box-2" x="6" y="96" width="106" height="42"/>
+            <text class="d-title" x="59" y="122" text-anchor="middle">class y</text>
+
+            <rect class="d-box" x="146" y="16" width="112" height="42"/>
+            <text class="d-title" x="202" y="38" text-anchor="middle">temb[t]</text>
+            <text class="d-sub" x="202" y="52" text-anchor="middle">64 x 128</text>
+
+            <rect class="d-box" x="146" y="96" width="112" height="42"/>
+            <text class="d-title" x="202" y="118" text-anchor="middle">cemb[y]</text>
+            <text class="d-sub" x="202" y="132" text-anchor="middle">133 x 128</text>
+
+            <rect class="d-box" x="292" y="56" width="96" height="42"/>
+            <text class="d-title" x="340" y="78" text-anchor="middle">e (128)</text>
+            <text class="d-sub" x="340" y="92" text-anchor="middle">sum</text>
+
+            <path class="d-arrow" d="M112 37 H140" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M112 117 H140" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M258 37 H275 V71 H286" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M258 117 H275 V83 H286" marker-end="url(#ah2)"/>
+
+            <!-- the trunk -->
+            <rect class="d-box-2" x="6" y="188" width="106" height="42"/>
+            <text class="d-title" x="59" y="214" text-anchor="middle">x_t (784)</text>
+
+            <rect class="d-box" x="146" y="188" width="150" height="42"/>
+            <text class="d-title" x="221" y="210" text-anchor="middle">inp(x) + c1(e)</text>
+            <text class="d-sub" x="221" y="224" text-anchor="middle">ReLU</text>
+
+            <rect class="d-box" x="330" y="188" width="90" height="42"/>
+            <text class="d-title" x="375" y="214" text-anchor="middle">h (2048)</text>
+
+            <path class="d-arrow" d="M112 209 H140" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M296 209 H324" marker-end="url(#ah2)"/>
+            <!-- e projected into the trunk at the input -->
+            <path class="d-arrow" d="M310 98 V160 H221 V182" marker-end="url(#ah2)"/>
+
+            <!-- six residual blocks, each re-injecting e -->
+            <rect class="d-loop" x="452" y="30" width="278" height="212"/>
+            <text class="d-title" x="591" y="58" text-anchor="middle">x 6 residual blocks</text>
+            <text class="d-lbl" x="472" y="104">hn = LayerNorm(h)</text>
+            <text class="d-lbl" x="472" y="140">u&#160; = ReLU( a_i(hn) + c_i(e) )</text>
+            <text class="d-lbl" x="472" y="176">h&#160; = h + b_i(u)</text>
+            <text class="d-sub" x="591" y="214" text-anchor="middle">e re-injected each block</text>
+
+            <path class="d-arrow" d="M420 209 H446" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M388 77 H446" marker-end="url(#ah2)"/>
+            <text class="d-sub" x="416" y="70" text-anchor="middle">e</text>
+
+            <!-- the head -->
+            <rect class="d-box" x="762" y="108" width="132" height="42"/>
+            <text class="d-title" x="828" y="130" text-anchor="middle">LayerNorm</text>
+            <text class="d-sub" x="828" y="144" text-anchor="middle">then out</text>
+
+            <rect class="d-box" x="762" y="188" width="132" height="42"/>
+            <text class="d-title" x="828" y="214" text-anchor="middle">v&#770; (784)</text>
+
+            <path class="d-arrow" d="M730 129 H756" marker-end="url(#ah2)"/>
+            <path class="d-arrow" d="M828 150 V182" marker-end="url(#ah2)"/>
+          </svg>
+        </div>
+
+        <p>The class and timestep are summed into a single 128-dimensional
+          conditioning vector, which is projected into the trunk at the input
+          <strong>and again inside every block</strong>. Injecting it once is not
+          enough: with only one entry point the class signal has to survive six
+          layers, and high guidance scales produce artifacts. Both embeddings are
+          lookups, not matrix multiplies, so they cost bytes but no
+          arithmetic.</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Tensor</th><th>Shape</th><th>Bytes</th></tr></thead>
+            <tbody>
+              <tr><td><code>temb</code></td><td class="num">64 x 128</td><td class="num">8,192</td></tr>
+              <tr><td><code>cemb</code></td><td class="num">133 x 128</td><td class="num">17,024</td></tr>
+              <tr><td><code>inp</code></td><td class="num">2048 x 784</td><td class="num">1,605,632</td></tr>
+              <tr><td><code>a_i</code>, <code>b_i</code> (x6 each)</td><td class="num">2048 x 2048</td><td class="num">50,331,648</td></tr>
+              <tr><td><code>c_i</code> (x6) + input <code>c1</code></td><td class="num">2048 x 128</td><td class="num">1,835,008</td></tr>
+              <tr><td><code>out</code></td><td class="num">784 x 2048</td><td class="num">1,605,632</td></tr>
+              <tr><td><strong>total</strong></td><td></td><td class="num"><strong>55,403,136</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The grid is <strong>28x28</strong>, which is Quick, Draw!'s native
+          resolution. That is deliberate: the dataset ships 784-byte bitmaps, so
+          at this size there is no resampling at all. Earlier attempts at 16x16
+          had to downsample, and a 1-pixel doodle stroke either averages into
+          grey mush or barely survives &mdash; most of the "the model can't draw"
+          problem turned out to be a resampling artifact.</p>
+      </section>
+
+      <section id="weights" data-nav="55M weights">
+        <h2>Getting 55 million weights into a text file</h2>
+
+        <p>Weights are quantised to <strong>int8, symmetric, with one scale per
+          output row</strong>. A row is one output neuron's weight vector, which
+          is exactly the unit the forward pass consumes, so the scale folds into
+          the accumulator once instead of touching every weight. An embedding
+          table is a Linear with a one-hot input, so a row is one embedding
+          vector and the identical code applies with no special case.</p>
+
+        <figure class="code" data-lang="js">
+<pre><code class="lang-js">function matvec(name, x, out, relu) {
+  var w = W[name], s = SCALES[name], b = BIASES[name];
+  var rows = SHAPE[name][0], cols = SHAPE[name][1];
+  for (var i = 0; i &lt; rows; i++) {
+    var acc = 0, o = i * cols;
+    for (var j = 0; j &lt; cols; j++) acc += w[o + j] * x[j];
+    acc = acc * s[i] + (b ? b[i] : 0);
+    out[i] = relu &amp;&amp; acc &lt; 0 ? 0 : acc;
+  }
+  return out;
+}</code></pre>
+        </figure>
+
+        <p>Quantisation error was the risk I expected to bite hardest, because a
+          diffusion sampler feeds its own output back in eight times, so errors
+          have the opportunity to compound in a way they cannot in a single
+          forward pass. Measured on a smaller model, it does not: FD 5.87 float32
+          against 5.89 int8, class accuracy unchanged. Three reasons &mdash; DDIM
+          is contractive toward the data manifold, the x0 clamp is a hard bound
+          on per-step drift, and v-prediction has no <code>1/sqrt(abar)</code>
+          division to amplify anything.</p>
+
+        <p>Every tensor goes into <strong>one concatenated byte buffer, base64'd
+          exactly once</strong>. This matters: base64 pads to a multiple of
+          three, so encoding tensors separately would sprinkle padding through
+          the file. One buffer whose length is divisible by three encodes with
+          <strong>zero padding</strong>. The class embedding is sized to make
+          that true &mdash; <code>cond_rows()</code> adds spare rows until
+          <code>total % 3 == 0</code>, which is why <code>cemb</code> has 133
+          rows for 131 categories plus one null class.</p>
+
+        <p>Scales, biases and LayerNorm parameters stay as plain JSON numbers.
+          They are a few percent of the file, and quantising them would buy a
+          second dequantisation path in the JavaScript for nothing.</p>
+
+        <h3>The ASCII rule</h3>
+
+        <p>The payload must be <strong>7-bit ASCII</strong>, and the builder
+          asserts it.</p>
+
+        <div class="callout warn">
+          <p class="label">how a 75 MB PDF becomes 150 MB</p>
+          <p>pdfrw writes a Python string as a PDF literal <code>(...)</code>
+            when it can. If any character is not encodable in PDFDocEncoding it
+            silently falls back to <strong>UTF-16 hex</strong>, which doubles the
+            file. A single smart quote in a comment would double the document
+            with no error message. This fired once for real: a literal U+FE0F
+            variation selector inside a regex. Emoji in the vocabulary are safe
+            only because <code>json.dumps</code> escapes them to
+            <code>\uXXXX</code> &mdash; ASCII source characters that JavaScript
+            reads back as the original codepoint.</p>
+        </div>
+      </section>
+
+      <section id="generate" data-nav="On click">
+        <h2>What happens when you click Generate</h2>
+
+        <div class="diagram">
+          <svg viewBox="0 0 900 270" role="img"
+               aria-label="Pipeline: the typed word becomes a class and the seed becomes noise; eight DDIM steps each run the network twice and blend the results; the final image is painted onto 784 widgets.">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#1F2328"/>
+              </marker>
+              <marker id="ahr" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#E8695D"/>
+              </marker>
+            </defs>
+
+            <!-- inputs -->
+            <rect class="d-box-2" x="6" y="26" width="132" height="46"/>
+            <text class="d-title" x="72" y="48" text-anchor="middle">typed word</text>
+            <text class="d-sub" x="72" y="64" text-anchor="middle">"octopus"</text>
+
+            <rect class="d-box-2" x="6" y="150" width="132" height="46"/>
+            <text class="d-title" x="72" y="172" text-anchor="middle">seed field</text>
+            <text class="d-sub" x="72" y="188" text-anchor="middle">xorshift32</text>
+
+            <rect class="d-box" x="182" y="26" width="132" height="46"/>
+            <text class="d-title" x="248" y="48" text-anchor="middle">class y</text>
+            <text class="d-sub" x="248" y="64" text-anchor="middle">0..130 of 131</text>
+
+            <rect class="d-box" x="182" y="150" width="132" height="46"/>
+            <text class="d-title" x="248" y="172" text-anchor="middle">x_T</text>
+            <text class="d-sub" x="248" y="188" text-anchor="middle">784 gaussians</text>
+
+            <path class="d-arrow" d="M138 49 H176" marker-end="url(#ah)"/>
+            <path class="d-arrow" d="M138 173 H176" marker-end="url(#ah)"/>
+
+            <!-- the loop -->
+            <rect class="d-loop" x="360" y="8" width="340" height="254"/>
+            <text class="d-sub" x="530" y="256" text-anchor="middle">x 8 DDIM steps, eta = 0</text>
+
+            <rect class="d-box" x="378" y="26" width="140" height="46"/>
+            <text class="d-title" x="448" y="48" text-anchor="middle">network(x_t, t, y)</text>
+            <text class="d-sub" x="448" y="64" text-anchor="middle">v_class</text>
+
+            <rect class="d-box" x="542" y="26" width="140" height="46"/>
+            <text class="d-title" x="612" y="48" text-anchor="middle">network(x_t, t, &empty;)</text>
+            <text class="d-sub" x="612" y="64" text-anchor="middle">v_null</text>
+
+            <rect class="d-box" x="378" y="104" width="304" height="46"/>
+            <text class="d-title" x="530" y="126" text-anchor="middle">v = v_null + 2.5 (v_class &minus; v_null)</text>
+            <text class="d-sub" x="530" y="142" text-anchor="middle">classifier-free guidance</text>
+
+            <rect class="d-box" x="378" y="182" width="304" height="46"/>
+            <text class="d-title" x="530" y="204" text-anchor="middle">x0, clamp, re-derive eps, re-noise</text>
+            <text class="d-sub" x="530" y="220" text-anchor="middle">x_t &rarr; x_(t-1)</text>
+
+            <path class="d-arrow" d="M314 49 H372" marker-end="url(#ah)"/>
+            <path class="d-arrow" d="M314 173 H336 V62 H372" marker-end="url(#ah)"/>
+            <path class="d-arrow" d="M448 72 V98" marker-end="url(#ah)"/>
+            <path class="d-arrow" d="M612 72 V98" marker-end="url(#ah)"/>
+            <path class="d-arrow" d="M530 150 V176" marker-end="url(#ah)"/>
+            <!-- the loop back: the new x_t re-enters the network -->
+            <path class="d-arrow d-arrow-r" d="M378 205 H354 V38 H372"
+                  marker-end="url(#ahr)" stroke="#E8695D"/>
+
+            <!-- output -->
+            <rect class="d-box" x="744" y="150" width="150" height="46"/>
+            <text class="d-title" x="819" y="172" text-anchor="middle">784 widgets</text>
+            <text class="d-sub" x="819" y="188" text-anchor="middle">28 x 28 grid</text>
+            <path class="d-arrow" d="M682 205 H720 V173 H738" marker-end="url(#ah)"/>
+          </svg>
+        </div>
+
+        <p><strong>At page open</strong>, once: the base64 blob is decoded to an
+          <code>Int8Array</code> by a hand-rolled decoder (<code>atob</code> is
+          not guaranteed in a PDF sandbox); the tensor list is walked and each
+          name bound to a <strong>subarray view</strong> of that one buffer, so
+          nothing is copied; scratch buffers are allocated once and reused for
+          every step of every run; and the scheduler is chosen by feature
+          detection.</p>
+
+        <p>Weights stay <code>Int8Array</code> for the life of the document.
+          Materialising a float64 copy of 55M weights would be 440 MB of viewer
+          heap, and this repository already carries a commit titled <em>"Reduce
+          memory use slightly to prevent Chrome memory capping"</em>.</p>
+
+        <p><strong>On click:</strong> the typed word is resolved to a class
+          (<a href="#vocab">&sect;10</a>); the word and the seed field are hashed
+          into a 32-bit PRNG state and 784 Gaussian samples are drawn &mdash;
+          this is <code>x_T</code>, the starting noise; eight DDIM steps run,
+          each evaluating the network twice for guidance; the result is
+          painted.</p>
+
+        <div class="callout tip">
+          <p class="label">the seed box says auto</p>
+          <p>Everything above is a pure function of the word and the seed, so
+            the same two inputs draw the same picture forever &mdash; which
+            reads as a lookup table rather than a model. So the seed box ships
+            holding <code>auto</code>: a fresh seed off the clock, and a
+            different drawing on every click. That clock read is the only thing
+            in the document that varies between runs. The sampler stays
+            bit-deterministic, the seed it picked is printed to the console, and
+            typing any number into the box restores the reproducible case
+            exactly.</p>
+        </div>
+
+        <h3>The sampler is a state machine, not a loop</h3>
+
+        <p><code>dsStep()</code> performs exactly one denoising step and never
+          touches the UI. <code>dsPump()</code> decides how to keep going. That
+          separation exists because a PDF viewer's threading model is not
+          something you get to assume:</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Mode</th><th>Condition</th><th>Behaviour</th></tr></thead>
+            <tbody>
+              <tr><td><code>TIMER_ACRO</code></td><td><code>app.setTimeOut</code> exists</td><td>run a ~50 ms chunk, paint, reschedule</td></tr>
+              <tr><td><code>TIMER_DOM</code></td><td><code>setTimeout</code> exists</td><td>same, via the DOM timer</td></tr>
+              <tr><td><code>SYNC</code></td><td>neither</td><td>run straight through, painting every Nth step</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Acrobat's <code>setTimeOut</code> takes a <em>string expression</em>,
+          not a function, and will garbage-collect a timer object nobody holds a
+          reference to &mdash; so the handle is kept in a global and the callback
+          is passed as <code>"dsPump()"</code>.</p>
+
+        <div class="callout tip">
+          <p class="label">the Step button</p>
+          <p>There is also a <strong>Step</strong> button that advances exactly
+            one denoising step per click. It is the fallback if no scheduler
+            yields to the compositor, but it is also a better demo than an
+            animation: you watch noise resolve into a drawing at your own pace,
+            and it is the debugging tool you want anyway.</p>
+        </div>
+      </section>
+
+      <section id="painting" data-nav="Painting">
+        <h2>Painting: the picture is 784 buttons</h2>
+
+        <p>The drawing surface is not an image. PDF has no way for a script to
+          draw arbitrary pixels. What it has is <strong>form widgets</strong>,
+          and a widget's background colour is scriptable.</p>
+
+        <p>So the page carries <strong>784 borderless pushbuttons</strong> in a
+          28x28 grid. A pushbutton's entire appearance is its
+          <code>/MK/BG</code> entry &mdash; no font, no text layout, no value
+          string &mdash; which makes it the cheapest widget to repaint.
+          <code>/H /N</code> suppresses the click-flash so the picture does not
+          invert under the cursor; <code>/F 4</code> lets it print.</p>
+
+        <p>The build <strong>bakes a reference render into
+          <code>/MK/BG</code></strong>, so the grid shows a real drawing the
+          instant the file opens, before any script runs. That gives a free
+          end-to-end check: type <code>7</code> into the seed box &mdash; the
+          seed the appearance was baked from &mdash; click Generate, and if the
+          picture does not visibly change, the JavaScript agrees with numpy.
+          That used to need no typing, because the box shipped holding that
+          number; now it ships holding <code>auto</code>, so the first click is
+          meant to draw something else and the check costs one keystroke.</p>
+
+        <p>Painting is isolated in exactly one function, because whether
+          assigning <code>fillColor</code> actually <em>repaints</em> is
+          viewer-dependent and, in Chrome, currently does not work
+          (<a href="#unfinished">&sect;12</a>). Everything else &mdash;
+          dirty-pixel skipping, painting every Nth step, the runtime nudge cycler
+          &mdash; exists to keep that one function cheap and patchable.</p>
+
+        <h3>The character fallback</h3>
+
+        <p><code>--paint-mode chars</code> renders the drawing as 28 rows of text
+          instead, two characters per pixel through the ramp
+          <code>" .:-=+*#%@"</code>. Courier advances 0.6 em, so doubling each
+          character makes the result roughly square.</p>
+
+        <p>This is not a consolation prize. Writing <code>.value</code> on a text
+          field is the update path llm.pdf's entire console depends on, so it is
+          <em>known</em> to work in this viewer &mdash; which is why it is the
+          build that currently works end to end.</p>
+
+        <div class="callout warn">
+          <p class="label">one trap, which bit</p>
+          <p>The grey grid <strong>inverts</strong> and the character ramp must
+            <strong>not</strong>. Ink is a high value; on a white page the grey
+            grid has to flip it so ink paints dark. But text is already dark on
+            white, so ink takes the <em>dense</em> end of the ramp and background
+            stays blank. Inverting both produced a negative image &mdash; a page
+            full of <code>@</code> with the drawing carved out in
+            whitespace.</p>
+        </div>
+      </section>
+
+      <section id="vocab" data-nav="Word to class">
+        <h2>From a word to a category</h2>
+
+        <p>The model knows 131 objects. A typed word has to become one of
+          them.</p>
+
+        <ol class="body">
+          <li>strip the U+FE0F variation selector, then check the raw input
+            against the category list and a hand-written table of <strong>209
+            words and 161 emoji</strong></li>
+          <li>if that fails, walk the string by codepoint looking for a known
+            emoji &mdash; surrogate pairs are two UTF-16 units, so this steps by
+            codepoint, not index</li>
+          <li>normalise to letters and spaces, retry, then try crude
+            singularisation (<code>cats</code> &rarr; <code>cat</code>,
+            <code>boxes</code> &rarr; <code>box</code>)</li>
+          <li>try each token in turn, so <code>a big red car</code> finds
+            <code>car</code></li>
+          <li>otherwise pick a category by hashing the word &mdash;
+            <strong>and say so in the status line</strong></li>
+        </ol>
+
+        <p>That last point is a deliberate honesty constraint. The real ceiling
+          here is <em>"map the word to the nearest of 131 known objects and draw
+          it"</em> &mdash; this is not open-vocabulary generation, and the
+          interface should not imply otherwise.</p>
+
+        <p>The vocabulary is metadata, not weights, so
+          <code>tools/update_vocab.py</code> rewrites it in an existing model
+          file without retraining.</p>
+      </section>
+
+      <section id="verification" data-nav="Verification">
+        <h2>How we know it is right</h2>
+
+        <p>The builder writes the fully-substituted JavaScript to
+          <code>out/diffusion.js</code> <strong>from the same Python string it
+          hands to the PDF</strong>. The tested code is therefore byte-identical
+          to the shipped code by construction &mdash; no PDF parser, no
+          possibility of drift.</p>
+
+        <p><code>tools/harness.mjs</code> runs that file in Node under
+          <code>vm.createContext</code>, with the viewer's API stubbed just
+          deeply enough: <code>getField</code> returns recorders that log every
+          write, <code>app.setTimeOut</code> queues expressions drained in order,
+          and <code>app.alert</code> is a <strong>hard failure</strong> &mdash;
+          the payload's outer catch calls it, so every in-document exception
+          surfaces as a non-zero exit.</p>
+
+        <figure class="code" data-lang="sh">
+<pre><code class="lang-sh">python3 -m train.train_diffusion         # writes train/model.json
+python3 scripts/generateDiffusionPDF.py --bake-initial
+node tools/harness.mjs                   # in-PDF JS vs numpy</code></pre>
+        </figure>
+
+        <p>Five gates, hardest first:</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Gate</th><th>Check</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>fingerprint</td><td>payload and reference are the same model</td><td class="num">SHA-256 prefix</td></tr>
+              <tr><td>G1</td><td>PRNG stream, 512 draws</td><td class="num"><strong>exact integer equality</strong></td></tr>
+              <tr><td>G2</td><td>initial noise <code>x_T</code></td><td class="num"><strong>bit-identical float64</strong></td></tr>
+              <tr><td>G3</td><td>every intermediate <code>x_t</code>, all 8 steps</td><td class="num"><strong>3.5e-14</strong> (tol 1e-9)</td></tr>
+              <tr><td>G4</td><td>the painted greys / character rows</td><td class="num"><strong>exact</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>G3 is per-step rather than end-to-end so a divergence localises to one
+          step and one pixel instead of producing a single unhelpful diff. The
+          fingerprint gate exists because of a real failure: rebuilding the PDF
+          after a retrain without regenerating the reference makes G3 report a
+          numeric divergence, which reads exactly like a sampler bug and sends
+          you hunting one.</p>
+
+        <div class="callout warn">
+          <p class="label">what this does not prove</p>
+          <p>The harness reimplements the character-ramp formula in order to
+            check it, so for a while both copies were inverted together and G4
+            passed on a wrong rendering. <strong>A gate that reimplements what it
+            checks only proves the two copies agree.</strong> That is now
+            cross-checked against the independent Python renderer.</p>
+        </div>
+
+        <p>Two further checks run outside the harness: training reloads what it
+          just wrote and asserts the numpy forward pass reproduces the torch one
+          (a tensor-order bug fails the build), and
+          <code>tools/test_builder_identical.sh</code> proves the shared-helper
+          refactor left the original llm.pdf builder emitting identical
+          bytes.</p>
+      </section>
+
+      <section id="unfinished" data-nav="Unfinished">
+        <h2>Things that are wrong or unfinished</h2>
+
+        <h3>A tensor name collision</h3>
+        <p><code>tensor_order()</code> emits <code>c1</code> twice &mdash; once
+          as the input conditioning projection, once as block 1's. Because the
+          model builds blocks with <code>setattr(self, f"c{i}")</code>,
+          <code>self.c1</code> is overwritten, so the input projection and block
+          1 <strong>silently share one weight matrix</strong>. It is consistent
+          across torch, numpy and JavaScript, so everything trains and every gate
+          passes, but it is an unintended weight tie and it writes 262,144 bytes
+          into the blob twice. Fixing it means renaming the input projection and
+          retraining.</p>
+
+        <h3>The colour grid does not repaint in Chrome</h3>
+        <p><code>fillColor</code> writes are accepted and never reach the screen.
+          The ReadOnly flag has been ruled out. The character build works and is
+          what ships.</p>
+
+        <h3>The compute budget is unverified</h3>
+        <p>Everything is sized against 729M MAC/s measured in Node, where the JIT
+          is fully on. PDFium's policy is unknown. At that rate an image takes
+          1.2 s; ten times slower is 12 s, thirty times is 36 s &mdash; all
+          survivable against llm.pdf's ~50 s precedent, but nobody has measured
+          it. <code>out/probe.pdf</code> exists to answer this and has never been
+          run.</p>
+
+        <h3>Convolutions were never tried properly</h3>
+        <p>They are far more parameter-efficient for images and are the obvious
+          next architecture. They were ruled out early on a compute argument that
+          later measurement invalidated &mdash; the real budget turned out to be
+          one to two orders of magnitude larger than assumed. A comparison was
+          started and killed once the MLP result settled the immediate
+          question.</p>
+      </section>
+
+      <section id="wrong-plan" data-nav="Wrong turns">
+        <h2>Two things the original plan got wrong</h2>
+
+        <p>This project began from an <code>idea.md</code> arguing that a
+          diffusion model in a PDF was the wrong shape. Two of its load-bearing
+          claims turned out to be false, and the corrections are what made this
+          work.</p>
+
+        <h3>"The iterative sampler is the fatal part"</h3>
+        <p>True at Stable Diffusion's scale. False here, for a reason the
+          document itself supplies: it establishes file size as the binding
+          constraint. An iterative sampler multiplies <em>compute</em> but costs
+          <strong>zero extra file size</strong> &mdash; the same weights are
+          reused at every step. Diffusion spends the abundant resource to buy the
+          scarce one, which is the opposite of the trade it was assumed to be
+          making.</p>
+
+        <h3>"File size is ceiling #1," framed around 179 kB</h3>
+        <p>That framing came from a much smaller sibling artifact. This
+          repository ships PDFs of 18, 25 and 51 MB, and llm.pdf computes for
+          roughly 50 seconds per click. The budget was always one to two orders
+          of magnitude larger than assumed &mdash; which is how a 75 MB model
+          became reasonable.</p>
+
+        <p>Its open question about the execution substrate was also already
+          answered, in the repository: <code>llama/llama.js</code> asserts
+          <code>Math.imul</code> at startup and binds <code>Float64Array</code>,
+          <code>Float32Array</code>, <code>Int32Array</code> and
+          <code>Int8Array</code>. The Chromium target is a modern V8. Typed
+          arrays are available and asm.js is unnecessary.</p>
+      </section>
+
+      <section id="numbers" data-nav="The numbers">
+        <h2>The numbers</h2>
+
+        <div class="tw">
+          <table>
+            <tbody>
+              <tr><td>Parameters</td><td class="num">55,403,136 int8</td></tr>
+              <tr><td>Base64</td><td class="num">73,870,848 characters, zero padding</td></tr>
+              <tr><td>PDF</td><td class="num">75 MB</td></tr>
+              <tr><td>Vocabulary</td><td class="num">131 categories, 209 words, 161 emoji</td></tr>
+              <tr><td>Grid</td><td class="num">28 x 28 = 784 widgets</td></tr>
+              <tr><td>Sampling</td><td class="num">8 DDIM steps, guidance 2.5</td></tr>
+              <tr><td>Compute</td><td class="num">886M MAC per image</td></tr>
+              <tr><td>Speed</td><td class="num">1.2 s per image in Node (729M MAC/s)</td></tr>
+              <tr><td>Quality</td><td class="num">0.874 class accuracy, against 0.790 for a classifier on real drawings</td></tr>
+              <tr><td>Training</td><td class="num">45 epochs, 327,500 drawings, final loss 0.2476</td></tr>
+              <tr><td>Agreement with numpy</td><td class="num">3.5e-14 over the full trajectory</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The quality figure deserves a note: samples score <em>higher</em> than
+          the classifier manages on real human doodles. That is not the model
+          beating reality, it is what classifier-free guidance does &mdash; the
+          drawings come out more canonical than the real thing, which is the same
+          knob that destroys diversity if you push it further.</p>
+      </section>
+
+      <section id="vocabulary" data-nav="Every word">
+        <h2>Every word it knows</h2>
+
+        <p>All 131 of them. Reading down a column of the list on page
+          2 of the document gives the same order as reading along here &mdash;
+          the categories are grouped by theme, not alphabetised, because that is
+          how the training set was assembled.</p>
+
+        <p class="vocab">
+          apple&nbsp;&middot; pizza&nbsp;&middot; donut&nbsp;&middot;
+          ice&nbsp;cream&nbsp;&middot; hamburger&nbsp;&middot; carrot&nbsp;&middot;
+          strawberry&nbsp;&middot; watermelon&nbsp;&middot; bread&nbsp;&middot;
+          cookie&nbsp;&middot; lollipop&nbsp;&middot; popsicle&nbsp;&middot;
+          wine&nbsp;glass&nbsp;&middot; coffee&nbsp;cup&nbsp;&middot;
+          birthday&nbsp;cake&nbsp;&middot; mug&nbsp;&middot; teapot&nbsp;&middot;
+          fork&nbsp;&middot; spoon&nbsp;&middot; knife&nbsp;&middot;
+          tree&nbsp;&middot; flower&nbsp;&middot; cactus&nbsp;&middot;
+          leaf&nbsp;&middot; palm&nbsp;tree&nbsp;&middot; pineapple&nbsp;&middot;
+          cloud&nbsp;&middot; lightning&nbsp;&middot; moon&nbsp;&middot;
+          star&nbsp;&middot; sun&nbsp;&middot; rainbow&nbsp;&middot;
+          tornado&nbsp;&middot; snowflake&nbsp;&middot; cat&nbsp;&middot;
+          dog&nbsp;&middot; bird&nbsp;&middot; fish&nbsp;&middot;
+          butterfly&nbsp;&middot; bee&nbsp;&middot; snail&nbsp;&middot;
+          snake&nbsp;&middot; spider&nbsp;&middot; octopus&nbsp;&middot;
+          crab&nbsp;&middot; whale&nbsp;&middot; shark&nbsp;&middot;
+          elephant&nbsp;&middot; giraffe&nbsp;&middot; penguin&nbsp;&middot;
+          owl&nbsp;&middot; duck&nbsp;&middot; frog&nbsp;&middot;
+          sea&nbsp;turtle&nbsp;&middot; door&nbsp;&middot; house&nbsp;&middot;
+          chair&nbsp;&middot; table&nbsp;&middot; bed&nbsp;&middot;
+          clock&nbsp;&middot; television&nbsp;&middot; telephone&nbsp;&middot;
+          key&nbsp;&middot; candle&nbsp;&middot; hourglass&nbsp;&middot;
+          scissors&nbsp;&middot; hammer&nbsp;&middot; screwdriver&nbsp;&middot;
+          paintbrush&nbsp;&middot; pencil&nbsp;&middot; broom&nbsp;&middot;
+          bucket&nbsp;&middot; ladder&nbsp;&middot; umbrella&nbsp;&middot;
+          book&nbsp;&middot; envelope&nbsp;&middot; camera&nbsp;&middot;
+          headphones&nbsp;&middot; eyeglasses&nbsp;&middot;
+          light&nbsp;bulb&nbsp;&middot; car&nbsp;&middot; bicycle&nbsp;&middot;
+          airplane&nbsp;&middot; sailboat&nbsp;&middot; train&nbsp;&middot;
+          bus&nbsp;&middot; helicopter&nbsp;&middot; submarine&nbsp;&middot;
+          canoe&nbsp;&middot; motorbike&nbsp;&middot; wheel&nbsp;&middot;
+          t-shirt&nbsp;&middot; pants&nbsp;&middot; shoe&nbsp;&middot;
+          sock&nbsp;&middot; hat&nbsp;&middot; crown&nbsp;&middot;
+          sword&nbsp;&middot; necklace&nbsp;&middot; wristwatch&nbsp;&middot;
+          castle&nbsp;&middot; church&nbsp;&middot; lighthouse&nbsp;&middot;
+          bridge&nbsp;&middot; tent&nbsp;&middot; windmill&nbsp;&middot;
+          skyscraper&nbsp;&middot; The&nbsp;Eiffel&nbsp;Tower&nbsp;&middot;
+          stairs&nbsp;&middot; mountain&nbsp;&middot; eye&nbsp;&middot;
+          hand&nbsp;&middot; foot&nbsp;&middot; ear&nbsp;&middot; nose&nbsp;&middot;
+          tooth&nbsp;&middot; skull&nbsp;&middot; moustache&nbsp;&middot;
+          diamond&nbsp;&middot; triangle&nbsp;&middot; hexagon&nbsp;&middot;
+          smiley&nbsp;face&nbsp;&middot; snowman&nbsp;&middot;
+          traffic&nbsp;light&nbsp;&middot; stop&nbsp;sign&nbsp;&middot;
+          guitar&nbsp;&middot; violin&nbsp;&middot; piano&nbsp;&middot;
+          drums&nbsp;&middot; trumpet&nbsp;&middot; saxophone
+        </p>
+
+        <p>Another 370 synonyms and emoji resolve to one of these, and a typed
+          phrase is searched token by token, so <code>a big red car</code> finds
+          <code>car</code>. Anything that still misses is hashed to a category
+          and the document says so in its status line.</p>
+      </section>
+
+      <section id="credits" data-nav="Credits">
+        <h2>Credits &amp; licence</h2>
+
+        <p>Built by me, <strong><a href="https://alexvd.dev/">Alex Van
+          Doren</a></strong>, one of the developers behind
+          <a href="https://stardance.hackclub.com/">Hack Club's Stardance
+          Challenge</a>, and super cool sailor.</p>
+
+        <p>This is a fork of
+          <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf</a> by
+          <a href="https://github.com/EvanZhouDev">Evan Zhou</a>, which runs an
+          entire LLM inside a PDF and supplies the JavaScript-injection trick
+          everything here stands on
+          (<a href="https://youtu.be/4cBom2lAx-g">watch the video</a>). That in
+          turn descends from
+          <a href="https://github.com/ading2210/linuxpdf">linuxpdf</a> and
+          <a href="https://github.com/ading2210/doompdf">DoomPDF</a> by
+          <a href="https://github.com/ading2210/">ading2210</a>, which are both
+          100% worth your time.</p>
+
+        <p>The model is trained on Google's
+          <a href="https://quickdraw.withgoogle.com/data">Quick, Draw!</a>
+          dataset &mdash; 327,500 human doodles across 131 categories.</p>
+
+        <p class="foot">Copyright &copy; 2026 vandorena. Source on
+          <a href="https://github.com/vandorena/diffusion.pdf">GitHub</a>.</p>
+      </section>
+
+    </main>
+  </div>
+</article>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------------------------------------------- the margin quicklinks + spy
+  var sections = [].slice.call(document.querySelectorAll(".sheet-body section[id]"));
+  var qlList = document.getElementById("qlList");
+
+  sections.forEach(function (sec) {
+    var h = sec.querySelector("h2");
+    if (!h) return;
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.textContent = (sec.dataset.nav || h.textContent).trim();
+    a.dataset.for = sec.id;
+    li.appendChild(a);
+    qlList.appendChild(li);
+  });
+
+  var links = [].slice.call(document.querySelectorAll("#qlList a"));
+
+  function markActive(id) {
+    links.forEach(function (a) {
+      if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    });
+  }
+
+  // track every section on screen and mark the topmost, so the pointer in the
+  // margin follows the reader rather than jumping at each boundary
+  var onScreen = new Set();
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) onScreen.add(entry.target.id);
+      else onScreen.delete(entry.target.id);
+    });
+    for (var i = 0; i < sections.length; i++) {
+      if (onScreen.has(sections[i].id)) { markActive(sections[i].id); return; }
+    }
+  }, { rootMargin: "-90px 0px -55% 0px", threshold: 0 });
+
+  sections.forEach(function (s) { observer.observe(s); });
+
+  // ----------------------------------------------------- syntax highlight
+  // a deliberately small tokeniser. every pattern below uses non-capturing
+  // groups only, so group n of the combined regex is rule n.
+  var GRAMMARS = {
+    js: [
+      ["c", /\/\/[^\n]*|\/\*[\s\S]*?\*\//],
+      ["s", /`(?:\\[\s\S]|[^\\`])*`|"(?:\\[\s\S]|[^\\"])*"|'(?:\\[\s\S]|[^\\'])*'/],
+      ["k", /\b(?:async|await|break|case|catch|class|const|continue|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|let|new|of|return|switch|this|throw|try|typeof|var|void|while|yield|true|false|null|undefined)\b/],
+      ["n", /\b(?:0[xX][\da-fA-F]+|\d+(?:\.\d+)?)\b/],
+      ["f", /\b[A-Za-z_$][\w$]*(?=\s*\()/],
+      ["p", /=>|\.\.\.|[{}[\]();,.:?=+\-*/%<>!&|~^]+/]
+    ],
+    sh: [
+      ["c", /#[^\n]*/],
+      ["s", /"(?:\\[\s\S]|[^\\"])*"|'[^']*'/],
+      ["k", /\b(?:cd|cp|curl|echo|export|mkdir|mv|node|pip|python|python3|rm|source|sudo)\b/],
+      ["n", /(?:^|\s)-{1,2}[A-Za-z][\w-]*/],
+      ["p", /[|&;<>()$]+/]
+    ],
+    py: [
+      ["c", /#[^\n]*/],
+      ["s", /"""[\s\S]*?"""|"(?:\\[\s\S]|[^\\"])*"|'(?:\\[\s\S]|[^\\'])*'/],
+      ["k", /\b(?:and|as|def|elif|else|for|from|if|import|in|is|not|or|pass|raise|return|try|except|while|with|True|False|None)\b/],
+      ["n", /\b\d+(?:\.\d+)?\b/],
+      ["f", /\b[A-Za-z_][\w]*(?=\s*\()/],
+      ["p", /[{}[\]();,.:=+\-*/%<>!&|]+/]
+    ],
+    fdf: [
+      ["c", /^%[^\n]*/m],
+      ["s", /\((?:[^()\\]|\\[\s\S])*\)/],
+      ["k", /\/[A-Za-z]+/],
+      ["n", /\b\d+\b/],
+      ["p", /<<|>>|[[\]]/]
+    ]
+  };
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function highlight(src, lang) {
+    var rules = GRAMMARS[lang];
+    if (!rules) return esc(src);
+
+    var re = new RegExp(rules.map(function (r) {
+      return "(" + r[1].source + ")";
+    }).join("|"), "gm");
+
+    var out = "", last = 0, m;
+    while ((m = re.exec(src)) !== null) {
+      if (m[0].length === 0) { re.lastIndex++; continue; }
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      var cls = "p";
+      for (var i = 0; i < rules.length; i++) {
+        if (m[i + 1] !== undefined) { cls = rules[i][0]; break; }
+      }
+      out += '<span class="t-' + cls + '">' + esc(m[0]) + "</span>";
+      last = m.index + m[0].length;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  document.querySelectorAll("figure.code").forEach(function (fig) {
+    var code = fig.querySelector("code");
+    if (!code) return;
+    code.innerHTML = highlight(code.textContent, fig.dataset.lang);
+  });
+})();
+</script>
+</body>
+</html>

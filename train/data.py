@@ -18,19 +18,67 @@ import numpy as np
 
 URL = "https://storage.googleapis.com/quickdraw_dataset/full/numpy_bitmap/{}.npy"
 
+# The bucket listing is the only authoritative list of category names; there is
+# no categories.txt, despite what a lot of write-ups claim.
+LIST_URL = ("https://storage.googleapis.com/storage/v1/b/quickdraw_dataset/o"
+            "?prefix=full/numpy_bitmap/&fields=items(name)&maxResults=1000")
+
 NATIVE = 28  # quickdraw bitmaps are 28x28. at --grid 28 there is no resampling.
 ROW_BYTES = NATIVE * NATIVE
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 # Chosen for silhouettes that survive a coarse grid and read differently from
-# each other. Curated in eval_samples.py against what actually renders.
+# each other, which matters more than it sounds: several radial shapes (star,
+# sun, flower) collapse into the same blob at this resolution, so only one of
+# each family earns a slot. Curated against what eval_samples.py actually
+# renders, not against what sounds appealing.
+#
+# `python3 -m train.data --list` prints all 345 available.
 CATEGORIES = [
-    "apple", "book", "car", "cat",
-    "clock", "cloud", "door", "envelope",
-    "eye", "fish", "house", "ladder",
-    "lightning", "star", "tree", "umbrella",
+    "apple", "pizza", "donut", "ice cream",
+    "hamburger", "carrot", "strawberry", "watermelon",
+    "bread", "cookie", "lollipop", "popsicle",
+    "wine glass", "coffee cup", "birthday cake", "mug",
+    "teapot", "fork", "spoon", "knife",
+    "tree", "flower", "cactus", "leaf",
+    "palm tree", "pineapple", "cloud", "lightning",
+    "moon", "star", "sun", "rainbow",
+    "tornado", "snowflake", "cat", "dog",
+    "bird", "fish", "butterfly", "bee",
+    "snail", "snake", "spider", "octopus",
+    "crab", "whale", "shark", "elephant",
+    "giraffe", "penguin", "owl", "duck",
+    "frog", "sea turtle", "door", "house",
+    "chair", "table", "bed", "clock",
+    "television", "telephone", "key", "candle",
+    "hourglass", "scissors", "hammer", "screwdriver",
+    "paintbrush", "pencil", "broom", "bucket",
+    "ladder", "umbrella", "book", "envelope",
+    "camera", "headphones", "eyeglasses", "light bulb",
+    "car", "bicycle", "airplane", "sailboat",
+    "train", "bus", "helicopter", "submarine",
+    "canoe", "motorbike", "wheel", "t-shirt",
+    "pants", "shoe", "sock", "hat",
+    "crown", "sword", "necklace", "wristwatch",
+    "castle", "church", "lighthouse", "bridge",
+    "tent", "windmill", "skyscraper", "The Eiffel Tower",
+    "stairs", "mountain", "eye", "hand",
+    "foot", "ear", "nose", "tooth",
+    "skull", "moustache", "diamond", "triangle",
+    "hexagon", "smiley face", "snowman", "traffic light",
+    "stop sign", "guitar", "violin", "piano",
+    "drums", "trumpet", "saxophone",
 ]
+
+
+def all_categories():
+    """Every category name Quick, Draw! publishes. 345 of them, one request."""
+    import json
+
+    with urllib.request.urlopen(LIST_URL, timeout=60) as resp:
+        listing = json.load(resp)
+    return sorted(item["name"].split("/")[-1][:-4] for item in listing["items"])
 
 
 def _read_npy_header(url):
@@ -90,9 +138,9 @@ def fetch_category(name, count, cache_dir=CACHE_DIR):
     except urllib.error.HTTPError as e:
         if e.code == 404:
             raise RuntimeError(
-                f"no such Quick, Draw! category: {name!r}. "
-                "Names must match exactly, e.g. 'ice cream', 't-shirt'. "
-                "Full list: https://storage.googleapis.com/quickdraw_dataset/full/categories.txt"
+                f"no such Quick, Draw! category: {name!r}. Names must match "
+                "exactly, including spaces and hyphens ('ice cream', 't-shirt'). "
+                "Run `python3 -m train.data --list` to see all 345."
             ) from e
         raise
     except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -195,7 +243,17 @@ if __name__ == "__main__":
     p.add_argument("--per-class", type=int, default=64)
     p.add_argument("--grid", type=int, default=NATIVE)
     p.add_argument("--categories", nargs="*", default=None)
+    p.add_argument("--list", action="store_true",
+                   help="print every available category and exit")
     a = p.parse_args()
+
+    if a.list:
+        names = all_categories()
+        print(f"{len(names)} categories:\n")
+        for i in range(0, len(names), 4):
+            print("  " + "".join(f"{n:<24}" for n in names[i:i + 4]).rstrip())
+        print(f"\nCurrently trained on {len(CATEGORIES)}: {', '.join(CATEGORIES)}")
+        raise SystemExit(0)
 
     imgs, labs, cats = load(a.categories, a.per_class, a.grid)
     print(f"\n{len(imgs)} images, {a.grid}x{a.grid}, range [{imgs.min():.1f}, {imgs.max():.1f}]\n")

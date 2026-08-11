@@ -41,6 +41,12 @@ WIDTH = HEIGHT = 700
 CONSOLE_ROWS = 12
 CONSOLE_H = 11
 
+# Kept in step with seedFromField() in src/diffusion.js, which decides the same
+# thing at runtime. The number is what the document falls back to, and what a
+# baked appearance is rendered from.
+AUTO_SEED_WORDS = ("auto", "random", "rand", "?", "")
+FALLBACK_SEED = 7
+
 
 def js_literal(value):
     """A JS literal, not a JSON string to be parsed at runtime.
@@ -85,6 +91,63 @@ def build_pixel_grid(grid, cell, x0, top, initial=None):
     return fields
 
 
+def pdf_escape(text):
+    """Escape a string for a PDF literal in a content stream.
+
+    The categories are plain ASCII today, but they come out of the model file
+    and tools/update_vocab.py can rewrite them without a retrain, so a future
+    word with a bracket in it should not corrupt the page.
+    """
+    return (text.replace("\\", r"\\")
+                .replace("(", r"\(")
+                .replace(")", r"\)"))
+
+
+def build_vocabulary_page(classes, synonyms):
+    """A second page listing every word the model knows.
+
+    The console cannot do this job. `known words: ...` is one line of about
+    1,100 characters in a field 684pt wide and 11pt tall, so it was being
+    silently truncated to the first handful and eating a twelfth of the
+    scrollback to do it. Static page text has no such limit, costs no widgets,
+    and prints.
+
+    Column-major fill, because the category list is grouped by theme -- food,
+    then plants, then weather, then animals -- and reading down a column keeps
+    those neighbours together.
+    """
+    page = create_page(WIDTH, HEIGHT)
+    page.Contents = PdfDict()
+
+    stream = create_text(30, HEIGHT - 44, 14,
+                         f"The {len(classes)} words diffusion.pdf knows")
+    stream += create_text(
+        30, HEIGHT - 62, 8,
+        f"Type any of these. {len(synonyms)} synonyms and emoji also resolve; "
+        "anything else maps to the")
+    stream += create_text(
+        30, HEIGHT - 74, 8,
+        "nearest one of them, and the document tells you when it has guessed.")
+
+    cols = 4
+    rows = -(-len(classes) // cols)          # ceil
+    col_w = (WIDTH - 60) // cols
+    # 15pt of leading and a 10pt face, so 33 rows fill the page rather than
+    # crowding into the top third of it.
+    for i, name in enumerate(classes):
+        col, row = divmod(i, rows)
+        stream += create_text(30 + col * col_w, HEIGHT - 110 - row * 15, 10,
+                              pdf_escape(name))
+
+    stream += create_text(
+        30, 22, 7,
+        "The vocabulary is metadata, not weights: tools/update_vocab.py "
+        "rewrites it without retraining.")
+
+    page.Contents.stream = stream
+    return page
+
+
 def main():
     p = argparse.ArgumentParser(description="Build the diffusion PDF")
     p.add_argument("--model", default=os.path.join(ROOT, "train", "model.json"))
@@ -102,12 +165,32 @@ def main():
                         "Cyclable at runtime with the Nudge button.")
     p.add_argument("--steps", type=int, default=None)
     p.add_argument("--guidance", type=float, default=None)
-    p.add_argument("--seed", type=int, default=7)
+    # A number, or "auto" for a fresh seed off the clock on every click. Auto
+    # is the default because one word giving one drawing forever reads as a
+    # lookup table rather than a model. The cost is the free end-to-end check
+    # in the baked render: with auto the first Generate is *meant* to differ
+    # from the appearance baked into the widgets, so to run that check you now
+    # type FALLBACK_SEED into the box first.
+    p.add_argument("--seed", default="auto",
+                   help='initial value of the seed box: an integer, or "auto"')
     p.add_argument("--word", default="house")
     p.add_argument("--cell", type=int, default=None)
     p.add_argument("--bake-initial", action="store_true",
                    help="render the default word into /MK/BG at build time")
     a = p.parse_args()
+
+    # The box may say "auto", but DEF_SEED and the baked render still need a
+    # number: DEF_SEED is what the JS falls back to when the box holds
+    # something it cannot parse, and a baked appearance has to come from one
+    # specific trajectory.
+    seed_text = str(a.seed).strip()
+    if seed_text.lower() in AUTO_SEED_WORDS:
+        seed_num = FALLBACK_SEED
+    else:
+        try:
+            seed_num = int(seed_text)
+        except ValueError:
+            p.error(f'--seed must be an integer or "auto", not {a.seed!r}')
 
     with open(a.model) as f:
         model = json.load(f)
@@ -122,7 +205,13 @@ def main():
 
     tensors = [[n, r, c] for n, r, c in model["tensors"]]
 
+    # Same fingerprint tools/reference.py records, so the harness can tell
+    # "these are different models" apart from "the sampler diverged".
+    import hashlib
+    model_id = hashlib.sha256(model["w"].encode("ascii")).hexdigest()[:16]
+
     replacements = {
+        "__MODEL_ID__": model_id,
         "__GRID__": grid,
         "__LEVELS__": a.levels,
         "__CONSOLE_LINE_COUNT__": CONSOLE_ROWS,
@@ -143,7 +232,7 @@ def main():
         "__NULL_CLASS__": model["guidance"]["null_class"],
         "__STEPS_DEFAULT__": steps,
         "__GUIDANCE_DEFAULT__": guidance,
-        "__SEED_DEFAULT__": a.seed,
+        "__SEED_DEFAULT__": seed_num,
         "__WORD_DEFAULT__": a.word,
         # last, and largest
         "__WEIGHTS_B64__": model["w"],
@@ -166,7 +255,7 @@ def main():
         from train import export_weights as E
         print(f"rendering {a.word!r} for the initial appearance...")
         loaded = E.load(a.model)
-        img = E.sample(loaded, a.word, a.seed, steps=steps, guidance=guidance)
+        img = E.sample(loaded, a.word, seed_num, steps=steps, guidance=guidance)
         # same quantisation the JS paints with, and the same inversion
         initial = []
         for v in img:
@@ -213,7 +302,7 @@ def main():
     fields.append(create_field("wordInput", x0, controls_y, 150, 22, a.word))
 
     page.Contents.stream += create_text(x0 + 156, labels_y, 8, "Seed:")
-    fields.append(create_field("seedInput", x0 + 156, controls_y, 52, 22, str(a.seed)))
+    fields.append(create_field("seedInput", x0 + 156, controls_y, 52, 22, seed_text))
 
     page.Contents.stream += create_text(x0 + 213, labels_y, 8, "Steps:")
     fields.append(create_field("stepsInput", x0 + 213, controls_y, 44, 22, str(steps)))
@@ -253,6 +342,11 @@ def main():
     page.Annots = PdfArray(fields)
 
     writer.addpage(page)
+    # Page 2 carries no widgets and no script: the page-open action and every
+    # field stay on page 1, so nothing about the model or the harness changes.
+    vocab_page = build_vocabulary_page(model["classes"],
+                                       model.get("synonyms", {}))
+    writer.addpage(vocab_page)
     attach_acroform(writer, fields)
 
     os.makedirs(os.path.dirname(a.output), exist_ok=True)

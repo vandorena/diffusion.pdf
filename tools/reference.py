@@ -57,7 +57,17 @@ def build(model_path, word, seed, steps=None, guidance=None, levels=16, n_prng=5
     lvl = np.clip(np.floor(unit * levels), 0, levels - 1).astype(int)
     painted = (levels - 1) - lvl
 
+    # Fingerprint the weights the reference was computed from. Rebuilding the
+    # PDF without regenerating the reference otherwise fails G3 with a numeric
+    # divergence, which reads like a sampler bug rather than what it is.
+    import hashlib
+
+    with open(model_path) as f:
+        blob = json.load(f)["w"]
+    fingerprint = hashlib.sha256(blob.encode("ascii")).hexdigest()[:16]
+
     return {
+        "model_id": fingerprint,
         "word": word,
         "seed": int(seed),
         "cls": int(cls),

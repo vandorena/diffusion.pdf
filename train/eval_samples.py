@@ -47,6 +47,61 @@ def recon_skill(model, images, labels, seed=999):
     return rows
 
 
+def train_classifier(images, labels, n_classes, grid, epochs=12, seed=0):
+    """A small reference classifier, used only to score samples.
+
+    This is the metric that actually answers "does it look like what I typed".
+    Sharpness catches noise and blur, but a confident wrong object scores well
+    on it; only a classifier notices that the cat came out as a mushroom.
+    """
+    import torch
+    import torch.nn as nn
+
+    torch.manual_seed(seed)
+    dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    net = nn.Sequential(
+        nn.Linear(grid * grid, 512), nn.ReLU(),
+        nn.Linear(512, 256), nn.ReLU(),
+        nn.Linear(256, n_classes),
+    ).to(dev)
+    X = torch.tensor(images, dtype=torch.float32, device=dev)
+    Y = torch.tensor(labels, dtype=torch.long, device=dev)
+    opt = torch.optim.Adam(net.parameters(), 1e-3)
+    lossf = nn.CrossEntropyLoss()
+    for _ in range(epochs):
+        order = torch.randperm(len(X), device=dev)
+        for i in range(0, len(X) - 255, 256):
+            idx = order[i:i + 256]
+            opt.zero_grad(set_to_none=True)
+            lossf(net(X[idx]), Y[idx]).backward()
+            opt.step()
+    net.eval()
+    with torch.no_grad():
+        held = net(X[:4096]).argmax(1)
+        acc = (held == Y[:4096]).float().mean().item()
+    return net, dev, acc
+
+
+def class_accuracy(model, net, dev, steps=None, guidance=None, per_class=2, seed=500):
+    """Fraction of samples the classifier assigns to the requested category."""
+    import torch
+
+    hits, total, per = 0, 0, {}
+    for cls, name in enumerate(model["classes"]):
+        got = 0
+        for k in range(per_class):
+            img = E.sample(model, name, seed + k * 977, cls=cls,
+                           steps=steps, guidance=guidance)
+            with torch.no_grad():
+                pred = net(torch.tensor(img, dtype=torch.float32,
+                                        device=dev).unsqueeze(0)).argmax(1).item()
+            got += int(pred == cls)
+            total += 1
+        hits += got
+        per[name] = got / per_class
+    return hits / total, per
+
+
 def sample_stats(model, n=8, steps=None, guidance=None, seed=1000):
     """Sharpness and class separation of actual samples.
 
