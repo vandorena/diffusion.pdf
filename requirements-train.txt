@@ -1,0 +1,14 @@
+# Offline training only. None of this ships.
+#
+# The PDF carries the exported weights in train/model.json and nothing else,
+# and building it needs only the pdfrw in requirements.txt.
+#
+#   python3 -m pip install -r requirements-train.txt
+#
+# numpy runs the reference sampler and the data pipeline. torch trains the
+# denoiser and supplies erfinv for the inverse-CDF noise table (scipy is not
+# required). torchvision is deliberately absent -- Quick, Draw! is fetched by
+# hand in train/data.py, and previews are written as PGM rather than pulling
+# in Pillow.
+numpy
+torch

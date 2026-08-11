@@ -1,112 +1,25 @@
 import base64
 import argparse
 
-from pdfrw import PdfWriter
-from pdfrw.objects.pdfname import PdfName
-from pdfrw.objects.pdfstring import PdfString
 from pdfrw.objects.pdfdict import PdfDict
 from pdfrw.objects.pdfarray import PdfArray
 import os
+import sys
 
+# Works whether this is run as `python3 scripts/generatePDF.py` from the repo
+# root or as `python3 ./generatePDF.py` from inside scripts/, which is what
+# build-pdfs.sh and the README both do.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def create_script(js):
-    action = PdfDict()
-    action.S = PdfName.JavaScript
-    action.JS = js
-    return action
-
-
-def create_page(width, height):
-    page = PdfDict()
-    page.Type = PdfName.Page
-    page.MediaBox = PdfArray([0, 0, width, height])
-
-    page.Resources = PdfDict()
-    page.Resources.Font = PdfDict()
-    page.Resources.Font.F1 = PdfDict()
-    page.Resources.Font.F1.Type = PdfName.Font
-    page.Resources.Font.F1.Subtype = PdfName.Type1
-    page.Resources.Font.F1.BaseFont = PdfName.Courier
-
-    return page
-
-
-def create_field(name, x, y, width, height, value="", f_type=PdfName.Tx):
-    annotation = PdfDict()
-    annotation.Type = PdfName.Annot
-    annotation.Subtype = PdfName.Widget
-    annotation.FT = f_type
-    annotation.Ff = 2
-    annotation.Rect = PdfArray([x, y, x + width, y + height])
-    annotation.T = PdfString.encode(name)
-    annotation.V = PdfString.encode(value)
-
-    annotation.BS = PdfDict()
-    annotation.BS.W = 0
-
-    appearance = PdfDict()
-    appearance.Type = PdfName.XObject
-    appearance.SubType = PdfName.Form
-    appearance.FormType = 1
-    appearance.BBox = PdfArray([0, 0, width, height])
-    appearance.Matrix = PdfArray([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
-
-    return annotation
-
-
-def create_text(x, y, size, txt):
-    return f"""
-  BT
-  /F1 {size} Tf
-  {x} {y} Td ({txt}) Tj
-  ET
-  """
-
-
-def create_button(name, x, y, width, height, value):
-    button = create_field(name, x, y, width, height, f_type=PdfName.Btn)
-    button.AA = PdfDict()
-    button.Ff = 65536
-    button.MK = PdfDict()
-    button.MK.BG = PdfArray([0.90])
-    button.MK.CA = value
-    return button
-
-
-def create_action_buttons(buttons_info):
-    """
-    Create buttons that execute a single JavaScript function when clicked.
-
-    Parameters:
-    buttons_info -- List of dictionaries containing button information:
-                   {
-                       "name": "button_name",
-                       "x": x_position,
-                       "y": y_position,
-                       "width": button_width,
-                       "height": button_height,
-                       "label": "Button Label",
-                       "js_function": "functionName()"
-                   }
-
-    Returns:
-    List of button annotations
-    """
-    buttons = []
-    for info in buttons_info:
-        name = info["name"]
-        button = create_button(
-            name,
-            info["x"],
-            info["y"],
-            info["width"],
-            info["height"],
-            info.get("label", name),
-        )
-        button.AA = PdfDict()
-        button.AA.U = create_script(info["js_function"])
-        buttons.append(button)
-    return buttons
+from pdf_helpers import (  # noqa: E402
+    PdfWriter,
+    create_action_buttons,
+    create_button,  # noqa: F401  (kept for anyone importing this module)
+    create_field,
+    create_page,
+    create_script,
+    create_text,
+)
 
 
 def process_template(template_path, llama_path, gguf_path, console_line_count):

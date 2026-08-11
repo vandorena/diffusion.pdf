@@ -1,3 +1,9 @@
 /.venv
 .DS_Store
 /models
+
+# built artifacts and downloaded training data
+/out
+/train/data
+/train/model.json
+node_modules

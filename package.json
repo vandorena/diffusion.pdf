@@ -1,0 +1,9 @@
+{
+  "name": "diffusion-pdf",
+  "private": true,
+  "type": "module",
+  "description": "Verification harness for the diffusion model embedded in the PDF",
+  "scripts": {
+    "verify": "node tools/harness.mjs"
+  }
+}
