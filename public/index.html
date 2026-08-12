@@ -101,6 +101,7 @@ a{color:var(--link);text-underline-offset:.16em}
 /* opaque paper, so the ruling stops where the title sits - as on a real page */
 .sheet-head{
   position:relative;z-index:1;
+  container-type:inline-size;   /* so h1 can measure the column, see below */
   background:var(--paper);
   padding:var(--line) 60px 0 calc(var(--margin-w) + 36px);
   border-bottom:1px solid var(--paper-edge);
@@ -109,7 +110,15 @@ a{color:var(--link);text-underline-offset:.16em}
    it grows with the sheet and wraps only when it runs out of paper */
 h1{
   margin:0;
-  font-size:clamp(32px,5.2vw,54px);line-height:1.12;
+  /* Sized against the writing column, not the viewport. The two diverge at
+     every breakpoint - the sheet stops growing at 1060px, and the margin folds
+     away at 860px, which hands the title 120px back - so a vw-based clamp is
+     right at one width and wrong at the next. Measured: the title's natural
+     width is 16.4x its font-size, so 100/16.4 = 6.09cqw is the exact fit and
+     5.95cqw leaves a little air. Sized to fit rather than set in nowrap, so
+     that if anything ever does run long it wraps instead of pushing the whole
+     page sideways. */
+  font-size:min(54px,5.95cqw);line-height:1.12;
   font-weight:700;letter-spacing:-.02em;
   color:var(--ink-strong);
   max-width:none;
@@ -166,7 +175,24 @@ h1 u::after{
   color:var(--muted);
   max-width:none;
 }
-.head-cta{margin:var(--line) 0 calc(var(--line) / 4);display:flex;
+/* The subtitle, under the title. The masthead is the one part of the sheet
+   that sits above .sheet-grid, so its height need not be a multiple of --line
+   and this can be spaced by eye without knocking the ruling out of step.
+   Sized and inked like the lede rather than like a section heading: it belongs
+   to the title above it, and must not read as the first heading of the
+   writing. position:static cancels the -3px baseline nudge the section
+   headings need, which is meaningless off the ruled grid. */
+.sheet-head h2{
+  position:static;
+  /* Tight to the title: the two are one unit, and the line boxes already carry
+     their own leading, so this reads as more air than the number suggests. */
+  margin:4px 0 0;
+  padding:0;
+  font-size:22px;line-height:var(--line);
+  font-weight:400;letter-spacing:0;
+  color:var(--muted);
+}
+.head-cta{margin:calc(var(--line) / 2) 0 calc(var(--line) / 4);display:flex;
           flex-wrap:wrap;gap:12px;align-items:center}
 .btn{
   display:inline-flex;align-items:center;gap:.55rem;
@@ -285,6 +311,9 @@ section > h2:first-child{margin-top:0}
    already provides it - so it starts one line higher. Still a whole band
    removed, so everything below stays on its rule. */
 .sheet-body > section:first-of-type > h2:first-child{padding-top:0}
+/* The subtitle now lives in the masthead, under the title - see .sheet-head h2.
+   Nothing sits between the body's top padding and the first section, so that
+   first heading starts on the second ruled line of the writing. */
 h3{
   margin:var(--line) 0 0;
   font-size:21px;line-height:var(--line);
@@ -521,11 +550,9 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 
   <header class="sheet-head">
     <div>
-      <h1>A PDF that draws <span class="sub">
-        <span class="spark" aria-hidden="true">&#10024;</span><u>Pictures</u><span class="spark" aria-hidden="true">&#10024;</span></span></h1>
-      <p class="head-lede">Type a word, press a button drawn on the page, and a
-        denoising diffusion model runs in the PDF viewer's own JavaScript
-        engine. No server, no plugin, nothing downloaded.</p>
+      <h1>A PDF that generates <span class="sub">
+        <span class="spark" aria-hidden="true">&#10024;</span><u>Sh*tty Images</u><span class="spark" aria-hidden="true">&#10024;</span></span></h1>
+      <h2> It has a f****** diffusion image model embedded into it!!!</h2>
       <p class="head-cta">
         <a class="btn" href="https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf">Download diffusion.pdf (75MB)</a>
         <a class="btn btn-2" href="https://github.com/vandorena/diffusion.pdf"><svg
@@ -559,9 +586,8 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 
     <!-- ------------------------------------------------- the written page -->
     <main class="sheet-body" id="main">
-
       <section id="overview" data-nav="Overview">
-        <h2>ts is amazing</h2>
+        <h2>So how did I get here? :D</h2>
 
         <p>The last two weeks i've been messing around with pdfs. 
           I made <a href="https://slop.alexvd.dev"> slop pdf</a>, a
@@ -578,10 +604,11 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 
       
 
-        <p>I eventually managed to get it working (with the help of claude) and here's the finished version.</p>
+        <p> I forked EvanZhouDev's llm.pdf repo, and
+           eventually managed to get it working (with the help of claude). Here's the finished version.</p>
 
         <div class="callout warn">
-          <p class="label">proof of conceptness warning</p>
+          <p class="label">proof of conceptness disclaimer/warning :p</p>
           <p>This model only has <strong> 131 Known Objects</strong>. If you don't use one of these objects,
             it will try to map your input to a known object, terribly.
         </div>
