@@ -322,6 +322,17 @@ h3{
 }
 p{margin:0 0 var(--line)}
 strong{font-weight:700;color:var(--ink-strong)}
+/* An emoji set into a line of prose. The height is the whole point: 22px inside
+   a 30px band, so the image cannot push the line box open and knock the ruling
+   below it out of step - the Slack asset is 40x41 natively and would do exactly
+   that if left to its own size. Width is left to follow, because these are not
+   always square and squashing one to fit is worse than letting it be 21px wide.
+   Nudged down to sit on the serif's baseline rather than hanging from the cap
+   height. */
+img.emoji{
+  display:inline-block;height:22px;width:auto;
+  vertical-align:-.28em;margin:0 .1em;
+}
 
 ul.body,ol.body{margin:0 0 var(--line);padding-left:26px}
 ul.body li,ol.body li{margin:0;line-height:var(--line)}
@@ -618,12 +629,10 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         <h2>Requirements</h2>
 
         <ul class="body">
-          <li><strong>Chrome</strong>, or anything else built on
-            <strong>PDFium</strong>. That is the viewer whose JavaScript
-            implementation this targets.</li>
-          <li>Patience for a 75 MB download, and a little RAM.</li>
-          <li>No network connection. Genuinely &mdash; once the file is on your
-            disk it never talks to anything.</li>
+          <li><strong>Chrome</strong> or any other chromium browser (minus safari) -- plz note no safari/firefox support</li>
+          <li>at least 75MB of storage (sorry its such a big file <img class="emoji"
+            src="https://emoji.slack-edge.com/T09V59WQY1E/sob-wx/bf98f2765f5152f7.png"
+            width="40" height="41" alt="sob">)</li>
         </ul>
 
         <p>Two builds exist. The <strong>character build</strong> paints the
