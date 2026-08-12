@@ -527,7 +527,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         denoising diffusion model runs in the PDF viewer's own JavaScript
         engine. No server, no plugin, nothing downloaded.</p>
       <p class="head-cta">
-        <a class="btn" href="https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf">Download diffusion.pdf</a>
+        <a class="btn" href="https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf">Download diffusion.pdf (75MB)</a>
         <a class="btn btn-2" href="https://github.com/vandorena/diffusion.pdf"><svg
             viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0
             3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
@@ -538,7 +538,6 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
             1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>GitHub
           Repo</a>
       </p>
-      <p class="head-note">75 MB &middot; 55,403,136 int8 weights &middot; opens in Chrome</p>
     </div>
   </header>
 
@@ -564,7 +563,18 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
       <section id="overview" data-nav="Overview">
         <h2>ts is amazing</h2>
 
-        <p>The last two weeks i've been messing around with pdfs. I made <a href="https://slop.alexvd.dev"> slop pdf</a>, a pdf that generates random ai slop stories when you open it, and I was showing that off to one of my friends who suggested I get the LLM to actually work inside the pdf, without an API call to a relay. I laughed but we did some research together, and we managed to find.</p>
+        <p>The last two weeks i've been messing around with pdfs. 
+          I made <a href="https://slop.alexvd.dev"> slop pdf</a>, a
+           pdf that generates random ai slop stories when you open it,
+            and I was showing that off to one of my friends who suggested I
+             get the LLM to actually work inside the pdf, without an API call to 
+             a relay. </p>
+             
+             <p>I laughed at the idea, but then we did some research together, and we managed to find
+             EvanZhouDev's <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf</a>.
+              Because it existed, I didn't want to waste my time or my tokens building something like it.
+              So I pivoted, eventually deciding to make a diffusion image model work fully inside
+              a pdf.</p>
 
       
 
