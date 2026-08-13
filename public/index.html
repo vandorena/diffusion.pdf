@@ -1027,14 +1027,36 @@ td.num{
     var btn = document.getElementById(e.id);
     if (!btn) return;
     var sessionKey = "ga_" + e.name + "_sent";
-    btn.addEventListener("click", function () {
+    btn.addEventListener("click", function (evt) {
       if (sessionStorage.getItem(sessionKey)) return;
       sessionStorage.setItem(sessionKey, "1");
       if (typeof gtag === "function") {
-        gtag("event", e.name, {
-          event_category: "engagement",
-          event_label: e.label
-        });
+        // Same-tab navigation to an external site can cancel the analytics
+        // request before it sends, so hold navigation until gtag confirms
+        // (or a timeout fires) before following the link.
+        var href = btn.href;
+        var sameTabExternalNav = href && btn.target !== "_blank";
+        if (sameTabExternalNav) {
+          evt.preventDefault();
+          var navigated = false;
+          var go = function () {
+            if (navigated) return;
+            navigated = true;
+            window.location.href = href;
+          };
+          gtag("event", e.name, {
+            event_category: "engagement",
+            event_label: e.label,
+            transport_type: "beacon",
+            event_callback: go
+          });
+          setTimeout(go, 300);
+        } else {
+          gtag("event", e.name, {
+            event_category: "engagement",
+            event_label: e.label
+          });
+        }
       }
     });
   });
