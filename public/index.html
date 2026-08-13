@@ -634,184 +634,29 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
             src="https://emoji.slack-edge.com/T09V59WQY1E/sob-wx/bf98f2765f5152f7.png"
             width="40" height="41" alt="sob">)</li>
         </ul>
-
-        <p>Two builds exist. The <strong>character build</strong> paints the
-          drawing as text and is the one that works end to end today; the
-          <strong>colour-grid build</strong> paints 784 button backgrounds and
-          is blocked on a viewer bug (<a href="#unfinished">&sect;12</a>).</p>
-      </section>
-
-      <section id="pdf-code" data-nav="A PDF runs code">
-        <h2>A PDF can run code</h2>
-
-        <p>This is the part most people do not know, and everything else rests
-          on it.</p>
-
-        <p>PDF is not only a page-description format. Since Acrobat 3 it has
-          carried a scripting layer, and viewers implement enough of it to be
-          interesting: a document can declare JavaScript that runs when a page
-          opens or when a widget is clicked.</p>
-
-        <p>Two mechanisms matter here. <strong>The page-open action:</strong> a
-          page object can carry an <code>/AA</code> ("additional actions")
-          dictionary, and its <code>/O</code> entry names an action to run when
-          the page is displayed. Ours is a <code>/JavaScript</code> action whose
-          <code>/JS</code> value is the entire program.</p>
-
-        <figure class="code" data-lang="fdf">
-<pre><code class="lang-fdf">2 0 obj
-&lt;&lt; /Type /Page
-   /AA &lt;&lt; /O &lt;&lt; /S /JavaScript /JS ( ...75 million characters... ) &gt;&gt; &gt;&gt;
-   /Annots [ ... 805 widgets ... ] &gt;&gt;</code></pre>
-        </figure>
-
-        <p><strong>Widget actions:</strong> form fields are annotations. Each
-          has its own <code>/AA</code>, whose <code>/U</code> entry fires on
-          mouse-up. Ours contain one expression each, e.g.
-          <code>dsBegin()</code>. Those functions were defined by the page-open
-          script and are still in scope, because a document shares one
-          JavaScript context for its whole session. The page-open action defines
-          the program; the buttons call into it.</p>
-
-        <p>The weights ride along inside that same <code>/JS</code> string as
-          base64. There is no separate resource, no attachment, no stream &mdash;
-          one enormous PDF literal string.
-          <code>builds/pythia-llm.pdf</code> in the repository is 51 MB of
-          exactly this, so the approach is known to scale.</p>
-
-        <div class="callout">
-          <p class="label">Note</p>
-          <p>This trick is inherited from
-            <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf</a>, which
-            this repository is a fork of, and before that from ading2210's
-            DoomPDF and LinuxPDF. What is new here is what the program
-            <em>does</em>.</p>
-        </div>
       </section>
 
       <section id="the-model" data-nav="The model">
-        <h2>What the program is</h2>
+        <h2>So is this AI?</h2>
 
-        <p>A <strong>denoising diffusion model</strong>: the same family as
-          Stable Diffusion, five orders of magnitude smaller.</p>
+        <p>Ehh.. it is technically a <strong>denoising diffusion model</strong> similar to
+          Stable Diffusion, Midjourney or Dall-e but like way worse</p>
 
-        <p>The idea is simpler than its reputation. Take a drawing, add a little
-          Gaussian noise, then more, then more, until after enough steps nothing
-          is left but noise. That destruction process is fixed and known. Now
-          train a network to undo one step of it: given a noisy image and a
-          number saying <em>how</em> noisy, predict what was added.</p>
+        <p>I trained this model on 130ish categories using 
+          Google's Quick Draw dataset of doodle images. It took 
+          me so so long (because I did it on my Macbook Air) but
+           eventually I trained it on enough data, for it to produce 
+           recognisable stuff.</p>
 
-        <p>Once you have that, you can generate. Start from pure noise &mdash;
-          which costs nothing, it is just random numbers &mdash; and repeatedly
-          ask the network to take one step back toward a clean image. After
-          enough steps you have a drawing that never existed. Ours is
-          <strong>class-conditional</strong>: the network also receives
-          <em>which of 131 objects</em> it should be denoising toward. That is
-          what makes typing a word do anything.</p>
+        <p>This training took alot, and ended up inflating the PDF's size to 78mb :cry:.</p>
 
-        <h3>The schedule</h3>
+        <p>Now you may be wondering, how'd i get the noise?.</p>
 
-        <p>The noise level at step <code>t</code> is described by
-          <code>abar[t]</code>, the fraction of the original signal still
-          present:</p>
+        <p>I get the noise by using the current time, legit the only way to get something noisy from a pdf. ;P</p>
 
-        <figure class="code">
-<pre><code>x_t = sqrt(abar[t]) * x_0  +  sqrt(1 - abar[t]) * noise</code></pre>
-        </figure>
 
-        <p><code>abar[0] = 0.9938</code> (nearly clean) down to
-          <code>abar[63] = 1.9e-9</code> (pure noise). The curve between them is
-          the <em>cosine schedule</em>, with one adjustment: the standard version
-          is calibrated for 32x32 images and up. At a coarser grid each pixel
-          carries more of the picture, so a given noise level destroys less, and
-          much of the schedule gets spent somewhere trivially easy. We divide the
-          signal-to-noise ratio by <code>(64/grid)^2</code>, which shifts the
-          whole schedule toward noisier. On 16x16 that single line moved class
-          accuracy from 0.978 to 0.995.</p>
-
-        <p>There are <strong>64 trained noise levels</strong>, not the usual
-          1000. Fewer levels means the timestep conditioning can be a lookup
-          table (<a href="#network">&sect;6</a>), and the shipped schedule is 64
-          numbers instead of a thousand.</p>
-
-        <h3>v-prediction</h3>
-
-        <p>The network could predict the noise that was added
-          (<code>eps</code>), the clean image (<code>x0</code>), or a particular
-          blend of the two called <code>v</code>:</p>
-
-        <figure class="code">
-<pre><code>v = sqrt(abar) * eps  -  sqrt(1 - abar) * x0</code></pre>
-        </figure>
-
-        <p>We predict <code>v</code>, and it is not a close call &mdash; measured
-          on an identical network and seed, class accuracy was <strong>0.978 for
-          v against 0.716 for eps</strong>.</p>
-
-        <p>The reason is worth understanding. At high noise <code>x_t</code> is
-          nearly pure noise, so <code>eps</code> is nearly <code>x_t</code>:
-          predicting it is almost the identity function, and the model burns
-          capacity learning to copy its input. Then recovering the image requires
-          dividing by <code>sqrt(abar)</code>, a number approaching zero, which
-          amplifies whatever error remains. <code>v</code> has bounded variance
-          across the whole schedule, and recovering <code>x0</code> from it is a
-          blend with no division at all.</p>
-
-        <h3>Sampling: DDIM</h3>
-
-        <p>Generation runs <strong>8 steps of DDIM with eta = 0</strong> &mdash;
-          fully deterministic. Each step asks the network for <code>v</code> at
-          the current noise level, derives the implied clean image
-          <code>x0</code> and <strong>clamps it to [-1, 1]</strong>, re-derives
-          the noise <code>eps</code> <strong>from the clamped x0</strong>, and
-          re-noises to the next, lower level.</p>
-
-        <figure class="code" data-lang="js">
-<pre><code class="lang-js">for (var j = 0; j &lt; NPIX; j++) {
-  var val = a * S.x[j] - bb * v[j];
-  if (val &lt; -1) val = -1; else if (val &gt; 1) val = 1;
-  x0[j] = val;
-}
-// eps is re-derived from the clipped x0, not taken from the model.
-for (j = 0; j &lt; NPIX; j++) {
-  var eps = (S.x[j] - a * x0[j]) / bb;
-  S.x[j] = ap * x0[j] + bp * eps;
-}</code></pre>
-        </figure>
-
-        <div class="callout warn">
-          <p class="label">the worst bug this project had</p>
-          <p>That re-derivation is not optional. DDIM's update assumes
-            <code>x_t = sqrt(abar)*x0 + sqrt(1-abar)*eps</code>. Clamping
-            <code>x0</code> while keeping the model's original <code>eps</code>
-            breaks the identity &mdash; the pair no longer describes the state
-            the sampler is actually in &mdash; and the error compounds. The x0
-            prediction began at correlation 1.000 with a correct drawing and
-            decayed to 0.368, producing noise whose mean and variance still
-            looked entirely reasonable. <strong>Every training metric was
-            healthy throughout.</strong></p>
-        </div>
-
-        <p>Determinism matters beyond reproducibility: it is what lets the whole
-          trajectory be checked against a reference implementation
-          (<a href="#verification">&sect;11</a>).</p>
-
-        <h3>Classifier-free guidance</h3>
-
-        <p>Each step actually runs the network <strong>twice</strong>: once told
-          the class, once told nothing (a dedicated null class the model was
-          trained on 10% of the time). The two are then extrapolated apart, with
-          <code>w = 2.5</code>:</p>
-
-        <figure class="code">
-<pre><code>v = v_null + w * (v_class - v_null)</code></pre>
-        </figure>
-
-        <p>This doubles the compute and is worth it: it moves class accuracy from
-          0.703 to 0.969. Past about 2.5 the metric keeps climbing while the
-          drawings visibly collapse toward a single prototype per class &mdash;
-          the accuracy number alone would pick a worse model.</p>
       </section>
+
 
       <section id="constraint" data-nav="The constraint">
         <h2>The constraint that shapes everything</h2>
