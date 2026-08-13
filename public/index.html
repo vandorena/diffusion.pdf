@@ -670,124 +670,49 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         <h2>So how fast is it?</h2>
 
         <ul class="body">
-          <li>It takes about <strong>1.2 seconds</strong> per step on my M5 Macbook Air</li>
-          <li>The PDF from testing has a compute budget of around 1.46 GFLOPS (729M MAC/s)</li>
+          <li>It takes about <strong>1.8 seconds</strong> per step when I have the PDF generating in Chrome on my M5 Macbook Air</li>
+          <li> The PDF has a compute of <strong>0.116 GFLOPS</strong> on my my laptop when opened in Chrome (58 Million MAC/s)</li>
         </ul>
       </section>
 
       <section id="numbers" data-nav="The numbers">
-        <h2>The numbers</h2>
+        <h2>les specs</h2>
 
         <div class="tw">
           <table>
             <tbody>
-              <tr><td>Parameters</td><td class="num">55,403,136 int8</td></tr>
-              <tr><td>Base64</td><td class="num">73,870,848 characters, zero padding</td></tr>
-              <tr><td>PDF</td><td class="num">75 MB</td></tr>
-              <tr><td>Vocabulary</td><td class="num">131 categories, 209 words, 161 emoji</td></tr>
-              <tr><td>Grid</td><td class="num">28 x 28 = 784 widgets</td></tr>
-              <tr><td>Sampling</td><td class="num">8 DDIM steps, guidance 2.5</td></tr>
+              <tr><td># of Parameters</td><td class="num">55,403,136 int8</td></tr>
+              <tr><td>PDF Size</td><td class="num">75 MB</td></tr>
+              <tr><td>Vocabulary Size</td><td class="num">131 doodle categories</td></tr>
               <tr><td>Compute</td><td class="num">886M MAC per image</td></tr>
-              <tr><td>Speed</td><td class="num">1.2 s per image in Node (729M MAC/s)</td></tr>
-              <tr><td>Quality</td><td class="num">0.874 class accuracy, against 0.790 for a classifier on real drawings</td></tr>
+              <tr><td>Speed</td><td class="num">~15.3s per image (at 58M MAC/s)</td></tr>
+              <tr><td>Quality</td><td class="num">0.874 class accuracy</td></tr>
               <tr><td>Training</td><td class="num">45 epochs, 327,500 drawings, final loss 0.2476</td></tr>
-              <tr><td>Agreement with numpy</td><td class="num">3.5e-14 over the full trajectory</td></tr>
             </tbody>
           </table>
         </div>
-
-        <p>The quality figure deserves a note: samples score <em>higher</em> than
-          the classifier manages on real human doodles. That is not the model
-          beating reality, it is what classifier-free guidance does &mdash; the
-          drawings come out more canonical than the real thing, which is the same
-          knob that destroys diversity if you push it further.</p>
-      </section>
-
-      <section id="vocabulary" data-nav="Every word">
-        <h2>Every word it knows</h2>
-
-        <p>All 131 of them. Reading down a column of the list on page
-          2 of the document gives the same order as reading along here &mdash;
-          the categories are grouped by theme, not alphabetised, because that is
-          how the training set was assembled.</p>
-
-        <p class="vocab">
-          apple&nbsp;&middot; pizza&nbsp;&middot; donut&nbsp;&middot;
-          ice&nbsp;cream&nbsp;&middot; hamburger&nbsp;&middot; carrot&nbsp;&middot;
-          strawberry&nbsp;&middot; watermelon&nbsp;&middot; bread&nbsp;&middot;
-          cookie&nbsp;&middot; lollipop&nbsp;&middot; popsicle&nbsp;&middot;
-          wine&nbsp;glass&nbsp;&middot; coffee&nbsp;cup&nbsp;&middot;
-          birthday&nbsp;cake&nbsp;&middot; mug&nbsp;&middot; teapot&nbsp;&middot;
-          fork&nbsp;&middot; spoon&nbsp;&middot; knife&nbsp;&middot;
-          tree&nbsp;&middot; flower&nbsp;&middot; cactus&nbsp;&middot;
-          leaf&nbsp;&middot; palm&nbsp;tree&nbsp;&middot; pineapple&nbsp;&middot;
-          cloud&nbsp;&middot; lightning&nbsp;&middot; moon&nbsp;&middot;
-          star&nbsp;&middot; sun&nbsp;&middot; rainbow&nbsp;&middot;
-          tornado&nbsp;&middot; snowflake&nbsp;&middot; cat&nbsp;&middot;
-          dog&nbsp;&middot; bird&nbsp;&middot; fish&nbsp;&middot;
-          butterfly&nbsp;&middot; bee&nbsp;&middot; snail&nbsp;&middot;
-          snake&nbsp;&middot; spider&nbsp;&middot; octopus&nbsp;&middot;
-          crab&nbsp;&middot; whale&nbsp;&middot; shark&nbsp;&middot;
-          elephant&nbsp;&middot; giraffe&nbsp;&middot; penguin&nbsp;&middot;
-          owl&nbsp;&middot; duck&nbsp;&middot; frog&nbsp;&middot;
-          sea&nbsp;turtle&nbsp;&middot; door&nbsp;&middot; house&nbsp;&middot;
-          chair&nbsp;&middot; table&nbsp;&middot; bed&nbsp;&middot;
-          clock&nbsp;&middot; television&nbsp;&middot; telephone&nbsp;&middot;
-          key&nbsp;&middot; candle&nbsp;&middot; hourglass&nbsp;&middot;
-          scissors&nbsp;&middot; hammer&nbsp;&middot; screwdriver&nbsp;&middot;
-          paintbrush&nbsp;&middot; pencil&nbsp;&middot; broom&nbsp;&middot;
-          bucket&nbsp;&middot; ladder&nbsp;&middot; umbrella&nbsp;&middot;
-          book&nbsp;&middot; envelope&nbsp;&middot; camera&nbsp;&middot;
-          headphones&nbsp;&middot; eyeglasses&nbsp;&middot;
-          light&nbsp;bulb&nbsp;&middot; car&nbsp;&middot; bicycle&nbsp;&middot;
-          airplane&nbsp;&middot; sailboat&nbsp;&middot; train&nbsp;&middot;
-          bus&nbsp;&middot; helicopter&nbsp;&middot; submarine&nbsp;&middot;
-          canoe&nbsp;&middot; motorbike&nbsp;&middot; wheel&nbsp;&middot;
-          t-shirt&nbsp;&middot; pants&nbsp;&middot; shoe&nbsp;&middot;
-          sock&nbsp;&middot; hat&nbsp;&middot; crown&nbsp;&middot;
-          sword&nbsp;&middot; necklace&nbsp;&middot; wristwatch&nbsp;&middot;
-          castle&nbsp;&middot; church&nbsp;&middot; lighthouse&nbsp;&middot;
-          bridge&nbsp;&middot; tent&nbsp;&middot; windmill&nbsp;&middot;
-          skyscraper&nbsp;&middot; The&nbsp;Eiffel&nbsp;Tower&nbsp;&middot;
-          stairs&nbsp;&middot; mountain&nbsp;&middot; eye&nbsp;&middot;
-          hand&nbsp;&middot; foot&nbsp;&middot; ear&nbsp;&middot; nose&nbsp;&middot;
-          tooth&nbsp;&middot; skull&nbsp;&middot; moustache&nbsp;&middot;
-          diamond&nbsp;&middot; triangle&nbsp;&middot; hexagon&nbsp;&middot;
-          smiley&nbsp;face&nbsp;&middot; snowman&nbsp;&middot;
-          traffic&nbsp;light&nbsp;&middot; stop&nbsp;sign&nbsp;&middot;
-          guitar&nbsp;&middot; violin&nbsp;&middot; piano&nbsp;&middot;
-          drums&nbsp;&middot; trumpet&nbsp;&middot; saxophone
-        </p>
-
-        <p>Another 370 synonyms and emoji resolve to one of these, and a typed
-          phrase is searched token by token, so <code>a big red car</code> finds
-          <code>car</code>. Anything that still misses is hashed to a category
-          and the document says so in its status line.</p>
       </section>
 
       <section id="credits" data-nav="Credits">
-        <h2>Credits &amp; licence</h2>
+        <h2>roll the credits</h2>
 
         <p>Built by me, <strong><a href="https://alexvd.dev/">Alex Van
-          Doren</a></strong>, one of the developers behind
+          Doren</a></strong>. I'm one of the developers behind
           <a href="https://stardance.hackclub.com/">Hack Club's Stardance
-          Challenge</a>, and super cool sailor.</p>
+          Challenge</a>, I'm a super cool sailor, and I'm also an incoming freshman at Brown University.</p>
 
-        <p>This is a fork of
+        <p>This is a fork of the really cool
           <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf</a> by
-          <a href="https://github.com/EvanZhouDev">Evan Zhou</a>, which runs an
-          entire LLM inside a PDF and supplies the JavaScript-injection trick
-          everything here stands on
-          (<a href="https://youtu.be/4cBom2lAx-g">watch the video</a>). That in
-          turn descends from
-          <a href="https://github.com/ading2210/linuxpdf">linuxpdf</a> and
+          <a href="https://github.com/EvanZhouDev">Evan Zhou</a>, that runs an
+          LLM inside a PDF, the thing I was originally intending to build.
+          Make sure to check out his<a href="https://youtu.be/4cBom2lAx-g"> Youtube Video </a> about it, which honestly explained alot.</p>
+          I also wanted to credit <a href="https://github.com/ading2210/linuxpdf">linuxpdf</a> and
           <a href="https://github.com/ading2210/doompdf">DoomPDF</a> by
-          <a href="https://github.com/ading2210/">ading2210</a>, which are both
-          100% worth your time.</p>
+          <a href="https://github.com/ading2210/">ading2210</a>. They inspired me to experiment within the PDF spec, and the coolest thing about them is that they were actually submitted to a Hack Club program I worked on, <a href="https://summer.hackclub.com/">The Summer of Making</a>.</p>
 
-        <p>The model is trained on Google's
+        <p>Also ty Google, for making the
           <a href="https://quickdraw.withgoogle.com/data">Quick, Draw!</a>
-          dataset &mdash; 327,500 human doodles across 131 categories.</p>
+          dataset.</p>
 
         <p class="foot">Copyright &copy; 2026 vandorena. Source on
           <a href="https://github.com/vandorena/diffusion.pdf">GitHub</a>.</p>
