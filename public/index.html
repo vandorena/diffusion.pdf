@@ -87,16 +87,6 @@ a{color:var(--link);text-underline-offset:.16em}
   top:0;bottom:0;left:var(--margin-w);width:2px;
   background:var(--margin-rule);
 }
-/* ring-binder holes punched down the left edge, showing the desk through */
-.sheet::before{
-  content:"";position:absolute;z-index:2;
-  top:0;bottom:0;left:26px;width:18px;
-  background-image:radial-gradient(circle at 9px 60px,
-    var(--desk) 8px,var(--paper-edge) 8px,transparent 9.5px);
-  background-size:18px calc(var(--line) * 4);
-  background-repeat:repeat-y;
-}
-
 /* ------------------------------------------------------------- the heading */
 /* opaque paper, so the ruling stops where the title sits - as on a real page */
 .sheet-head{
@@ -281,7 +271,9 @@ h1 u::after{
 
 .sheet-body{
   min-width:0;
-  padding:var(--line) 60px calc(var(--line) * 3) 36px;
+  /* no band below the last line: the paper is cut at the copyright rule rather
+     than running on blank. .foot supplies its own band of air above itself. */
+  padding:var(--line) 60px 0 36px;
 }
 .sheet-body > section > *{max-width:var(--measure)}
 /* the diagram and the wide tables are slips laid across the page, and are
@@ -294,6 +286,14 @@ h1 u::after{
    after a table still lands on a ruled line.                                */
 section{display:flow-root}
 section + section{margin-top:var(--line)}
+/* The run of "so what is this thing" sections is pulled two bands up, so each
+   reads as an answer to what precedes it rather than a fresh topic. Still a
+   whole multiple of --line, so the writing below them stays on its rule. */
+#the-model,
+#painting,
+#speed,
+#numbers,
+#credits{margin-top:calc(var(--line) * -1)}
 /* A heading is set larger than the body, so its baseline sits lower in an
    identical line box. It takes one whole band of padding to keep the block a
    multiple of --line, then a visual nudge - which costs no height - to drop
@@ -517,7 +517,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 @media (max-width:860px){
   /* the margin folds to the top of the page and the quicklinks sit across it */
   :root{--margin-w:0px}
-  .sheet::before,.sheet::after{display:none}
+  .sheet::after{display:none}
   .sheet-head{padding:var(--line) 24px 0}
   .sheet-grid{grid-template-columns:minmax(0,1fr)}
   .sheet-margin{
@@ -531,7 +531,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
   .quicklinks a{text-indent:0;padding-left:0}
   .quicklinks a::before{width:auto;margin-right:4px}
   .margin-out{display:flex;gap:18px;flex-wrap:wrap}
-  .sheet-body{padding:var(--line) 24px calc(var(--line) * 2)}
+  .sheet-body{padding:var(--line) 24px 0}
 }
 @media (max-width:520px){
   .sheet{margin-left:0;margin-right:0}
@@ -586,18 +586,12 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
       <nav class="quicklinks" aria-label="On this page">
         <h2>Contents</h2>
         <ol id="qlList"></ol>
-        <div class="margin-out">
-          <a href="https://github.com/vandorena/diffusion.pdf">github ↗</a>
-          <a href="https://github.com/EvanZhouDev/llm.pdf">llm.pdf ↗</a>
-          <a href="https://quickdraw.withgoogle.com/data">quick, draw! ↗</a>
-          <a href="https://alexvd.dev/">alexvd.dev ↗</a>
-        </div>
       </nav>
     </aside>
 
     <!-- ------------------------------------------------- the written page -->
     <main class="sheet-body" id="main">
-      <section id="overview" data-nav="Overview">
+      <section id="overview">
         <h2>So how did I get here? :D</h2>
 
         <p>The last two weeks i've been messing around with pdfs. 
@@ -625,7 +619,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         </div>
       </section>
 
-      <section id="requirements" data-nav="Requirements">
+      <section id="requirements">
         <h2>Requirements</h2>
 
         <ul class="body">
@@ -636,7 +630,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         </ul>
       </section>
 
-      <section id="the-model" data-nav="The model">
+      <section id="the-model">
         <h2>So is this AI?</h2>
 
         <p>Ehh.. it is technically a <strong>denoising diffusion model</strong> similar to
@@ -657,7 +651,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 
       </section>
 
-      <section id="painting" data-nav="Painting">
+      <section id="painting">
         <h2>Why is it ASCII art?</h2>
 
         <p> It was easier to just render the drawing as 28 rows of text, due to the nature
@@ -666,7 +660,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         <p>You may notice that the actual generation is inverted, this is so that it shows up well against a white background.</p>
       </section>
 
-      <section id="speed" data-nav="speed">
+      <section id="speed">
         <h2>So how fast is it?</h2>
 
         <ul class="body">
@@ -675,7 +669,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         </ul>
       </section>
 
-      <section id="numbers" data-nav="The numbers">
+      <section id="numbers">
         <h2>les specs</h2>
 
         <div class="tw">
@@ -693,7 +687,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         </div>
       </section>
 
-      <section id="credits" data-nav="Credits">
+      <section id="credits">
         <h2>roll the credits</h2>
 
         <p>Built by me, <strong><a href="https://alexvd.dev/">Alex Van
@@ -715,7 +709,7 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
           dataset.</p>
 
         <p class="foot">Copyright &copy; 2026 vandorena. Source on
-          <a href="https://github.com/vandorena/diffusion.pdf">GitHub</a>.</p>
+          <a href="https://github.com/vandorena/diffusion.pdf">GitHub</a>. | Check out my personal site <a href="https://alexvd.dev/">alexvd.dev</a></p>
       </section>
 
     </main>
