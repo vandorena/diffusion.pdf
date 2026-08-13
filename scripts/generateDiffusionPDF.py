@@ -1,9 +1,7 @@
 """Build diffusion.pdf -- a denoising diffusion model inside a PDF.
 
-Separate from generatePDF.py on purpose. The two share the PDF primitives in
-pdf_helpers.py and nothing else: different template, placeholders, layout,
-field topology and CLI. Merging them would put the working, video-documented
-llm.pdf builder at risk every time this layout changes.
+Uses the shared PDF primitives in pdf_helpers.py; everything else -- template,
+placeholders, layout, field topology and CLI -- is specific to this builder.
 
 The fully-substituted JavaScript is written to --emit-js from the same string
 handed to create_script, so the verification harness runs code that is
@@ -277,8 +275,7 @@ def main():
         f"{grid}x{grid} denoising diffusion, {steps} steps, no network.")
 
     # Character-ramp rows instead of a colour grid. Writing .value on a text
-    # field is the update path llm.pdf's entire console already depends on, so
-    # it is the one that is known to work in this viewer -- which makes it the
+    # field is a known-good update path in this viewer, which makes it the
     # right fallback when fillColor turns out not to repaint.
     if a.paint_mode == "chars":
         fields = []

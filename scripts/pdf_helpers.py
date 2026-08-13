@@ -1,9 +1,7 @@
-"""PDF primitives shared by the builders.
+"""PDF primitives used by the diffusion PDF builder.
 
-Lifted verbatim from generatePDF.py so the llm.pdf builder and the diffusion
-builder cannot drift apart. The additions are backward compatible: every new
-argument defaults to the old behaviour, and the byte-for-byte output of
-generatePDF.py is unchanged (tools/test_builder_identical.sh proves it).
+Originally lifted from the generatePDF.py builder in the upstream llm.pdf
+project this repo is forked from.
 """
 
 from pdfrw import PdfWriter  # noqa: F401  (re-exported for the builders)
@@ -178,10 +176,10 @@ def attach_acroform(writer, fields):
 def render_template(text, replacements):
     """Placeholder substitution, with the failure modes made loud.
 
-    The naive str.replace chain in generatePDF.py fails silently on a typo'd
-    placeholder, and pdfrw will quietly re-encode the whole payload as UTF-16
-    hex -- doubling the file -- if a single non-ASCII character sneaks into a
-    comment. Both are checked here.
+    A naive str.replace chain fails silently on a typo'd placeholder, and
+    pdfrw will quietly re-encode the whole payload as UTF-16 hex -- doubling
+    the file -- if a single non-ASCII character sneaks into a comment. Both
+    are checked here.
     """
     import re
 

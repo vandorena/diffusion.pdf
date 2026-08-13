@@ -40,10 +40,10 @@ the trade the document assumed it was making.
 Two further corrections fell out of building it:
 
 - **File size was not the constraint either.** `idea.md`'s 179 kB framing comes
-  from a much smaller artifact. This repository ships PDFs of 18, 25 and 51 MB,
-  and llm.pdf computes for roughly 50 seconds per click. Against that
-  precedent, 9.1 MB and a few seconds is unremarkable.
-- **The substrate fork is already closed.** `llama/llama.js` asserts
+  from a much smaller artifact. llm.pdf ships PDFs of 18, 25 and 51 MB, and
+  computes for roughly 50 seconds per click. Against that precedent, 9.1 MB
+  and a few seconds is unremarkable.
+- **The substrate fork is already closed.** llm.pdf's `llama.js` asserts
   `Math.imul` at startup and binds `Float64Array`, `Float32Array`, `Int32Array`
   and `Int8Array`. The Chromium target is a modern V8, so typed arrays are
   available and asm.js is unnecessary.

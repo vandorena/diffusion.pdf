@@ -43,8 +43,8 @@ session. The page-open action defines the program; the buttons call into it.
 
 The weights ride along inside that same `/JS` string as base64. There is no
 separate resource, no attachment, no stream — one enormous PDF literal string.
-`builds/pythia-llm.pdf` in this repository is 51 MB of exactly this, so the
-approach is known to scale.
+llm.pdf ships PDFs up to 51 MB doing exactly this, so the approach is known to
+scale.
 
 This trick is inherited from [llm.pdf](https://github.com/EvanZhouDev/llm.pdf),
 which this repository is a fork of, and before that from ading2210's DoomPDF and
@@ -463,10 +463,9 @@ and G4 passed on a wrong rendering. A gate that reimplements what it checks only
 proves the two copies agree. That is now cross-checked against the independent
 Python renderer.
 
-Two further checks run outside the harness: training reloads what it just wrote
-and asserts the numpy forward pass reproduces the torch one (a tensor-order bug
-fails the build), and `tools/test_builder_identical.sh` proves the shared-helper
-refactor left the original llm.pdf builder emitting identical bytes.
+One further check runs outside the harness: training reloads what it just
+wrote and asserts the numpy forward pass reproduces the torch one (a
+tensor-order bug fails the build).
 
 ---
 
@@ -512,15 +511,15 @@ spends the abundant resource to buy the scarce one, which is the opposite of the
 trade it was assumed to be making.
 
 **"File size is ceiling #1," framed around 179 kB.** That framing came from a
-much smaller sibling artifact. This repository ships PDFs of 18, 25 and 51 MB,
-and llm.pdf computes for roughly 50 seconds per click. The budget was always one
-to two orders of magnitude larger than assumed — which is how a 75 MB model
-became reasonable.
+much smaller sibling artifact. llm.pdf ships PDFs of 18, 25 and 51 MB, and
+computes for roughly 50 seconds per click. The budget was always one to two
+orders of magnitude larger than assumed — which is how a 75 MB model became
+reasonable.
 
-Its open question about the execution substrate was also already answered, in
-the repository: `llama/llama.js` asserts `Math.imul` at startup and binds
-`Float64Array`, `Float32Array`, `Int32Array` and `Int8Array`. The Chromium
-target is a modern V8. Typed arrays are available and asm.js is unnecessary.
+Its open question about the execution substrate was also already answered by
+llm.pdf: `llama.js` asserts `Math.imul` at startup and binds `Float64Array`,
+`Float32Array`, `Int32Array` and `Int8Array`. The Chromium target is a modern
+V8. Typed arrays are available and asm.js is unnecessary.
 
 ---
 
