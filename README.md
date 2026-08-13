@@ -1,10 +1,8 @@
-<img src="./assets/logo.svg" width="300px">
-
 # A PDF that generates ✨Sh*tty Images✨
 
-## It has a f****** diffusion image model embedded into it!!!
+## It has a diffusion image model embedded into it!!!
 
-[Download diffusion.pdf (75MB)](https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf) &nbsp;|&nbsp; [GitHub Repo](https://github.com/vandorena/diffusion.pdf)
+[Download diffusion.pdf (75MB)](https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf)
 
 ## So how did I get here? :D
 
@@ -57,4 +55,4 @@ I also wanted to credit [linuxpdf](https://github.com/ading2210/linuxpdf) and [D
 
 Also ty Google, for making the [Quick, Draw!](https://quickdraw.withgoogle.com/data) dataset.
 
-Copyright © 2026 vandorena. Source on [GitHub](https://github.com/vandorena/diffusion.pdf). | Check out my personal site [alexvd.dev](https://alexvd.dev/)
+Copyright © 2026 vandorena. Check out my personal site [alexvd.dev](https://alexvd.dev/)
