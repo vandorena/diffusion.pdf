@@ -398,6 +398,31 @@ figure.code pre code{background:none;box-shadow:none;padding:0;
 .t-f{color:var(--t-f)}
 .t-p{color:var(--t-p)}
 
+/* ------------------------------------------------------------------- the demo
+   The recording itself, with nothing drawn around it - no slip, no frame, no
+   box holding it. Which means it is sized by its width and its height is
+   whatever the aspect ratio makes it, and that fights the one rule this page
+   has: a block whose height is not a whole number of bands knocks every ruled
+   line below it out of register.
+   Neither CSS nor a fixed height can settle that without either a box to
+   letterbox into or a hard width, so the remainder is measured and paid off in
+   script - see "the demo recording" at the foot of the page. aspect-ratio is
+   declared here so the space is correct on the very first paint, before the
+   file has loaded and before that script has run: no reflow, no shift. */
+figure.demo{margin:var(--line) 0;padding:0}
+figure.demo video{
+  display:block;
+  width:100%;max-width:480px;height:auto;
+  aspect-ratio:1870 / 1856;
+  background:var(--slip);   /* the space it will occupy, until it has loaded */
+}
+/* one band, so the caption costs the grid nothing */
+figure.demo figcaption{
+  max-width:480px;
+  font-family:var(--mono);font-size:11px;line-height:var(--line);
+  letter-spacing:.04em;color:var(--muted);
+}
+
 /* the svg is given a fixed height in whole lines, so it cannot drift */
 .diagram{
   margin:var(--line) 0;padding:15px 16px;
@@ -515,23 +540,43 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
   .sheet{margin-left:16px;margin-right:16px}
 }
 @media (max-width:860px){
-  /* the margin folds to the top of the page and the quicklinks sit across it */
+  /* The margin folds away entirely, and the contents go with it. The quicklinks
+     are a margin feature - they are written beside the writing, in the gutter
+     the red rule keeps for them. With no gutter there is nowhere for them to be
+     written, and folding them up into a horizontal row above the article only
+     bought a wrapped list of seven links sitting directly on top of the seven
+     headings it names. The page is short enough to scroll.
+     Hidden in CSS, not removed in JS, so the list is still built and still
+     correct the moment a rotation or a resize hands the margin back. This is the
+     same thing the print sheet does with the same element, for the same reason:
+     no margin, no marginalia. */
   :root{--margin-w:0px}
   .sheet::after{display:none}
   .sheet-head{padding:var(--line) 24px 0}
   .sheet-grid{grid-template-columns:minmax(0,1fr)}
-  .sheet-margin{
-    padding:var(--line) 24px 0;
-    border-bottom:1px solid var(--paper-edge);
-  }
-  .quicklinks{position:static}
-  .quicklinks ol{
-    display:flex;flex-wrap:wrap;column-gap:18px;
-  }
-  .quicklinks a{text-indent:0;padding-left:0}
-  .quicklinks a::before{width:auto;margin-right:4px}
-  .margin-out{display:flex;gap:18px;flex-wrap:wrap}
+  .sheet-margin{display:none}
   .sheet-body{padding:var(--line) 24px 0}
+}
+/* Once the two buttons no longer fit on one line they become a stack, and a
+   stack of two different widths reads as two unrelated things. So the column is
+   declared here rather than left to flex-wrap: measured, the pair breaks on its
+   own at 553px, and letting the wrap decide left a 550-555px window where they
+   stacked ragged. Taking the break 7px early means there is no width at which
+   they are stacked and unequal.
+   Left to itself the download button is 296px against the repo link's 166px;
+   stretch gives both the full column, and the labels centre in it. */
+@media (max-width:560px){
+  .head-cta{flex-direction:column;align-items:stretch;gap:10px}
+  .btn{
+    width:100%;justify-content:center;
+    /* the label needs two lines below ~340px, and the fixed 45px box let the
+       second one hang outside the ink. min-height holds the one-line case at
+       the same 1.5 bands it has always been, and the padding carries the wrap.
+       text-align centres the second line too - justify-content only centres the
+       label as a block, which left "(75MB)" hanging off to the left of it */
+    height:auto;min-height:calc(var(--line) * 1.5);
+    padding:8px 22px;line-height:1.25;text-align:center;
+  }
 }
 @media (max-width:520px){
   .sheet{margin-left:0;margin-right:0}
@@ -591,6 +636,14 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 
     <!-- ------------------------------------------------- the written page -->
     <main class="sheet-body" id="main">
+      <figure class="demo">
+        <video class="demo-v" width="1870" height="1856"
+               autoplay loop muted playsinline preload="metadata" controls>
+          <source src="demo.mp4" type="video/mp4">
+          Womp Womp. Your browser does not support the video.
+        </video>
+      </figure>
+
       <section id="overview">
         <h2>So how did I get here? :D</h2>
 
@@ -719,6 +772,56 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
 <script>
 (function () {
   "use strict";
+
+  // ----------------------------------------------------- the demo recording
+  // Two jobs. First the speed: the capture runs in real time, and 24 seconds of
+  // watching one 28x28 drawing resolve is longer than anyone gives a page they
+  // have just opened. At RATE it is the same event in a third of the wait, and
+  // the caption says it has been sped up. One number to tune.
+  //
+  // Second the ruling. The recording is 1870x1856 and carries no frame, so its
+  // height is whatever its width makes it - almost never a whole number of
+  // bands, and every ruled line below it would sit off-register by the
+  // remainder. So the remainder is measured and paid into the bottom margin:
+  // whatever the picture and its caption come to, the block is padded up to the
+  // next rule. Re-measured on resize, because the height is fluid.
+  var RATE = 3;
+  var demo = document.querySelector("figure.demo");
+  var demoV = demo && demo.querySelector("video");
+
+  if (demoV) {
+    demoV.defaultPlaybackRate = RATE;
+    demoV.playbackRate = RATE;
+    // some builds reset the rate when the source loads or the loop restarts
+    demoV.addEventListener("loadedmetadata", function () { demoV.playbackRate = RATE; });
+
+    // a looping clip is moving content that runs for well over five seconds.
+    // Honour the OS setting and leave the controls as the way back in.
+    var still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var settle = function () {
+      if (still.matches) { demoV.autoplay = false; demoV.pause(); }
+    };
+    settle();
+    if (still.addEventListener) still.addEventListener("change", settle);
+  }
+
+  if (demo) {
+    var band = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue("--line")) || 30;
+    var snap = function () {
+      // getBoundingClientRect excludes margins, so this does not chase itself
+      var h = demo.getBoundingClientRect().height;
+      var pad = (band - (h % band)) % band;
+      // one whole band of air, plus whatever it takes to land on the next rule
+      demo.style.marginBottom = (band + pad).toFixed(2) + "px";
+    };
+    snap();
+    // the height settles again once the file reports its real dimensions, and
+    // on every reflow after that
+    if (demoV) demoV.addEventListener("loadedmetadata", snap);
+    if (window.ResizeObserver) new ResizeObserver(snap).observe(demo);
+    else window.addEventListener("resize", snap);
+  }
 
   // ------------------------------------------- the margin quicklinks + spy
   var sections = [].slice.call(document.querySelectorAll(".sheet-body section[id]"));
