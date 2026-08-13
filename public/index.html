@@ -697,7 +697,7 @@ td.num{
       <h2> It has a f****** diffusion image model embedded into it!!!</h2>
       <p class="head-cta">
         <a class="btn" id="download-btn" href="https://github.com/vandorena/diffusion.pdf/releases/download/v1/diffusion-chars.pdf">Download diffusion.pdf (75MB)</a>
-        <a class="btn btn-2" href="https://github.com/vandorena/diffusion.pdf"><svg
+        <a class="btn btn-2" id="repo-btn" href="https://github.com/vandorena/diffusion.pdf"><svg
             viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0
             3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
             1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95
@@ -1019,18 +1019,24 @@ td.num{
 })();
 
 (function () {
-  var btn = document.getElementById("download-btn");
-  if (!btn) return;
-  var SESSION_KEY = "ga_download_click_sent";
-  btn.addEventListener("click", function () {
-    if (sessionStorage.getItem(SESSION_KEY)) return;
-    sessionStorage.setItem(SESSION_KEY, "1");
-    if (typeof gtag === "function") {
-      gtag("event", "download_click", {
-        event_category: "engagement",
-        event_label: "diffusion-chars.pdf"
-      });
-    }
+  var events = [
+    { id: "download-btn", name: "download_click", label: "diffusion-chars.pdf" },
+    { id: "repo-btn", name: "repo_click", label: "github-repo" }
+  ];
+  events.forEach(function (e) {
+    var btn = document.getElementById(e.id);
+    if (!btn) return;
+    var sessionKey = "ga_" + e.name + "_sent";
+    btn.addEventListener("click", function () {
+      if (sessionStorage.getItem(sessionKey)) return;
+      sessionStorage.setItem(sessionKey, "1");
+      if (typeof gtag === "function") {
+        gtag("event", e.name, {
+          event_category: "engagement",
+          event_label: e.label
+        });
+      }
+    });
   });
 })();
 </script>
