@@ -276,10 +276,11 @@ h1 u::after{
   padding:var(--line) 60px 0 36px;
 }
 .sheet-body > section > *{max-width:var(--measure)}
-/* the diagram and the wide tables are slips laid across the page, and are
-   allowed past the measure the prose keeps to */
-.sheet-body > section > .diagram,
-.sheet-body > section > .tw{max-width:none}
+/* the diagram is a slip laid across the page, and is allowed past the measure
+   the prose keeps to. The specs table is not: at 19 bands it is narrower than
+   the measure anyway, and it needs its own max-width to hold on small screens,
+   which a max-width:none here would outrank. */
+.sheet-body > section > .diagram{max-width:none}
 
 /* ------------------------------------------------------- the writing, on grid
    every rule below resolves to a whole multiple of --line, so a paragraph
@@ -446,27 +447,103 @@ figure.demo figcaption{
 .d-arrow-r{stroke:var(--margin-rule)}
 .d-arrow-b{stroke:var(--link)}
 
+/* ------------------------------------------------------------------ the specs
+   Ruled onto the page, not pasted onto it. This was a grey slip carrying its own
+   hairline row rules: a second sheet of paper laid over the first, which - having
+   covered the ruling it was sitting on - had to redraw that ruling in a paler
+   grey. Two horizontal grids, one of them redundant, which is most of why it read
+   as a stat card rather than as part of the writing.
+   The paper already rules the rows, so this is ruled in pen on both axes and both
+   axes answer to the ruling.
+
+   HORIZONTALLY: the cap and the foot are drawn ON printed rules, not between
+   them. A row is one band and the printed rule sits --rule-y into a band, so the
+   line above the first row is (--rule-y - --line) = -4px from the table's top
+   edge. The box is lifted by exactly that, and because the table is a whole
+   number of bands tall its foot lands on a printed rule as well. The lift is on
+   the drawn lines only - the writing itself does not move, so the rows keep
+   riding their own lines exactly like the prose does.
+
+   VERTICALLY: the three uprights sit on the same 30px module as the ruling -
+   0, 6 bands, 19 bands - so nothing here is a measurement of its own.
+
+   All of it is drawn on a pair of pseudo-elements rather than as borders: a
+   border would add its own height, and the writing below would go out of
+   register. Same reason every other rule on this sheet is a shadow. */
 .tw{
-  margin:var(--line) 0;overflow-x:auto;
-  background:var(--slip);
-  box-shadow:0 0 0 1px var(--slip-edge),2px 2px 0 rgba(0,0,0,.05);
+  position:relative;
+  /* 20 bands. Measured: the widest figure - the training row - sets this. At 19
+     bands it came to 359px against 358px of column and wrapped, for one pixel.
+     The cap is in the width itself rather than in max-width, because the measure
+     rule on .sheet-body > section > * is the more specific of the two and would
+     win: at 500px the table kept its 600 and took the page sideways with it. */
+  width:min(calc(var(--line) * 20), 100%);
+  margin:var(--line) 0;
 }
-table{border-collapse:collapse;width:100%;font-size:15px}
+.tw::before,.tw::after{
+  content:"";position:absolute;pointer-events:none;
+  top:calc(var(--rule-y) - var(--line));   /* onto the printed rule above */
+  height:100%;
+}
+/* the four sides */
+.tw::before{
+  left:0;right:0;
+  box-shadow:inset 0 2px 0 var(--ink-strong),inset 0 -2px 0 var(--ink-strong),
+             inset 2px 0 0 var(--ink-strong),inset -2px 0 0 var(--ink-strong);
+}
+/* and the upright between label and figure, on the module */
+.tw::after{
+  left:calc(var(--line) * 6);width:1px;
+  background:var(--ink);
+}
+table{
+  /* fixed, so the upright drawn above always lands on the column boundary
+     instead of wherever the longest label happened to push it */
+  table-layout:fixed;
+  border-collapse:collapse;width:100%;font-size:15px;
+}
 th,td{
-  text-align:left;padding:0 14px;
+  text-align:left;
   line-height:var(--line);
-  box-shadow:inset 0 -1px 0 var(--slip-edge);
   vertical-align:top;
 }
-thead th{
-  font-family:var(--mono);font-size:11px;
-  letter-spacing:.12em;text-transform:uppercase;
-  color:var(--muted);
-  box-shadow:inset 0 -1px 0 var(--ink);
+/* indented off the uprights on both sides - the lines are the margin here, and
+   writing that touches a ruled line reads as a mistake */
+tbody th{
+  width:calc(var(--line) * 6);
+  padding:0 18px 0 14px;
+  font-weight:400;
 }
-tbody tr:last-child td{box-shadow:none}
+tbody td{padding:0 14px 0 18px}
+/* The rule under each row, closing the grid. Drawn as a background rather than a
+   border for the usual reason - a border would add height - and positioned 3px up
+   from the cell's foot, which puts it at --rule-y within the band: on the printed
+   line, not near it. A figure that runs to two lines takes two bands and the rule
+   lands on the second one's printed line, so wrapping cannot put it mid-cell.
+   Set on the cells, so the segments meet across the upright as one line. */
+tbody th,tbody td{
+  background-image:linear-gradient(var(--ink),var(--ink));
+  background-repeat:no-repeat;
+  background-size:100% 1px;
+  background-position:0 calc(100% - 3px);
+}
+/* the last row needs none: the foot of the box is already drawn on that line */
+tbody tr:last-child > *{background-image:none}
 td code{white-space:nowrap}
-td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
+/* Left to wrap, not to scroll: every line box is exactly one band, so a figure
+   that runs to two lines takes two whole bands and the ruling still holds.
+   The 1px is the difference between where a 13px mono baseline and a 15px serif
+   baseline fall inside the same 30px line box - measured, not guessed. Done as a
+   nudge rather than with vertical-align:baseline, which reconciles the two by
+   stretching the row to 31px and walks the whole table off the ruling. */
+td.num{
+  font-family:var(--mono);font-size:13px;
+  position:relative;top:1px;
+  /* position:relative moves the whole painted box, row rule included, so the
+     nudge above also drags this cell's rule 1px below the th's. Pulled back
+     out of the background-position so the two sides still meet on one line. */
+  background-position:0 calc(100% - 4px);
+}
 
 /* ---------------------------------------------------------------- callouts
    Slips of note paper stuck onto the sheet: no border, a shadow that lifts
@@ -728,13 +805,13 @@ td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
         <div class="tw">
           <table>
             <tbody>
-              <tr><td># of Parameters</td><td class="num">55,403,136 int8</td></tr>
-              <tr><td>PDF Size</td><td class="num">75 MB</td></tr>
-              <tr><td>Vocabulary Size</td><td class="num">131 doodle categories</td></tr>
-              <tr><td>Compute</td><td class="num">886M MAC per image</td></tr>
-              <tr><td>Speed</td><td class="num">~15.3s per image (at 58M MAC/s)</td></tr>
-              <tr><td>Quality</td><td class="num">0.874 class accuracy</td></tr>
-              <tr><td>Training</td><td class="num">45 epochs, 327,500 drawings, final loss 0.2476</td></tr>
+              <tr><th scope="row"># of Parameters</th><td class="num">55,403,136 int8</td></tr>
+              <tr><th scope="row">PDF Size</th><td class="num">75 MB</td></tr>
+              <tr><th scope="row">Vocabulary Size</th><td class="num">131 doodle categories</td></tr>
+              <tr><th scope="row">Compute</th><td class="num">886M MAC per image</td></tr>
+              <tr><th scope="row">Speed</th><td class="num">~15.3s per image (at 58M MAC/s)</td></tr>
+              <tr><th scope="row">Quality</th><td class="num">0.874 class accuracy</td></tr>
+              <tr><th scope="row">Training</th><td class="num">45 epochs, 327,500 drawings, final loss 0.2476</td></tr>
             </tbody>
           </table>
         </div>
