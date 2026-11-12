@@ -2,7 +2,7 @@
 
 ## It has a diffusion image model embedded into it!!!
 
-[Download diffusion.pdf (75MB)](https://github.com/vandorena/diffusion.pdf/releases/download/v2/diffusion-chars.pdf)
+[Download diffusion.pdf (75MB)](https://github.com/vandorena/diffusion.pdf/releases/download/v3/diffusion-chars.pdf)
 
 ## So how did I get here? :D
 
