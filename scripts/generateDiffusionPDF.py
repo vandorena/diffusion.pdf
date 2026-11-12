@@ -118,14 +118,7 @@ def build_vocabulary_page(classes, synonyms):
     page.Contents = PdfDict()
 
     stream = create_text(30, HEIGHT - 44, 14,
-                         f"The {len(classes)} words diffusion.pdf knows")
-    stream += create_text(
-        30, HEIGHT - 62, 8,
-        f"Type any of these. {len(synonyms)} synonyms and emoji also resolve; "
-        "anything else maps to the")
-    stream += create_text(
-        30, HEIGHT - 74, 8,
-        "nearest one of them, and the document tells you when it has guessed.")
+                         f"{len(classes)} Objects diffusion.pdf can generate.")
 
     cols = 4
     rows = -(-len(classes) // cols)          # ceil
@@ -136,11 +129,6 @@ def build_vocabulary_page(classes, synonyms):
         col, row = divmod(i, rows)
         stream += create_text(30 + col * col_w, HEIGHT - 110 - row * 15, 10,
                               pdf_escape(name))
-
-    stream += create_text(
-        30, 22, 7,
-        "The vocabulary is metadata, not weights: tools/update_vocab.py "
-        "rewrites it without retraining.")
 
     page.Contents.stream = stream
     return page
@@ -269,10 +257,11 @@ def main():
     writer = PdfWriter()
     page = create_page(WIDTH, HEIGHT)
     page.Contents = PdfDict()
-    page.Contents.stream = create_text(8, HEIGHT - 24, 15, "diffusion.pdf")
-    page.Contents.stream += create_text(
-        150, HEIGHT - 22, 8,
-        f"{grid}x{grid} denoising diffusion, {steps} steps, no network.")
+    # Courier advances 0.6 em per character, so the title's width is known
+    # without a font metrics table.
+    title, title_size = "diffusion.pdf", 15
+    title_x = (WIDTH - len(title) * 0.6 * title_size) / 2
+    page.Contents.stream = create_text(title_x, HEIGHT - 24, title_size, title)
 
     # Character-ramp rows instead of a colour grid. Writing .value on a text
     # field is a known-good update path in this viewer, which makes it the
@@ -304,20 +293,16 @@ def main():
     page.Contents.stream += create_text(x0 + 213, labels_y, 8, "Steps:")
     fields.append(create_field("stepsInput", x0 + 213, controls_y, 44, 22, str(steps)))
 
-    page.Contents.stream += create_text(x0 + 262, labels_y, 8, "CFG:")
-    fields.append(create_field("guidanceInput", x0 + 262, controls_y, 44, 22, str(guidance)))
+    # No CFG box: the JS falls back to DEF_GUIDANCE (the model's own scale)
+    # when guidanceInput is absent, so the control is hidden, not disabled.
 
     fields.extend(create_action_buttons([
-        {"name": "generateButton", "x": x0 + 313, "y": controls_y,
+        {"name": "generateButton", "x": x0 + 264, "y": controls_y,
          "width": 70, "height": 22, "label": "Generate", "js_function": "dsBegin()"},
-        {"name": "stepButton", "x": x0 + 388, "y": controls_y,
+        {"name": "stepButton", "x": x0 + 339, "y": controls_y,
          "width": 42, "height": 22, "label": "Step", "js_function": "dsStepOnce()"},
-        {"name": "clearButton", "x": x0 + 435, "y": controls_y,
+        {"name": "clearButton", "x": x0 + 386, "y": controls_y,
          "width": 42, "height": 22, "label": "Clear", "js_function": "dsClear()"},
-        # Whether a viewer needs a repaint nudge, and which one, cannot be
-        # settled without a viewer. This makes it a click instead of a rebuild.
-        {"name": "nudgeButton", "x": x0 + 482, "y": controls_y,
-         "width": 46, "height": 22, "label": "Nudge", "js_function": "dsNudge()"},
     ]))
 
     status_y = controls_y - 26

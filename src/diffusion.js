@@ -349,8 +349,6 @@ try {
         S = null;
         var st = field("status");
         if (st) st.value = "cleared";
-        say("cleared. if the picture did not go blank, fillColor is not");
-        say("repainting in this viewer -- try the Nudge button.");
     }
 
     // Cycle the repaint strategy at runtime. Whether a viewer needs a nudge,
@@ -748,27 +746,4 @@ try {
     try {
         if (PX[0]) { PX[0].fillColor = ["G", 1]; canFill = true; }
     } catch (e) { canFill = false; }
-
-    say("=== diffusion.pdf ===");
-    say("a diffusion model, running in this document. no network.");
-    say("");
-    say(GRID + "x" + GRID + ", " + (nbytes / 1024).toFixed(0) + " kB of int8 weights, " +
-        ABAR.length + " trained steps");
-    say("scheduler: " + TIMER_MODE + ", paint: " + PAINT_MODE + ", nudge: " + NUDGE);
-    say("widgets resolved: " + resolved + "/" + NPIX +
-        ", fillColor assignable: " + canFill);
-    if (resolved === 0) {
-        say("!! getField cannot see the pixel widgets. Nothing can paint.");
-    } else if (!canFill) {
-        say("!! this viewer rejects fillColor. Use the chars build instead.");
-    }
-    say("");
-    // Not the list itself. 131 categories is one 1,100-character line in an
-    // 11pt field, so it printed as a truncated fragment and cost a twelfth of
-    // the scrollback; the full list is static text on page 2.
-    say("all " + CLASSES.length + " known words are listed on page 2.");
-    say("Type one and press Generate. Step advances one denoising step.");
-    say("Anything unknown maps to the nearest known object, and says so.");
-    say('Seed "auto" draws a new picture every click. The number it used');
-    say("is printed here -- type it back in to draw that one again.");
 } catch (e) { app.alert(e.stack || e); }
