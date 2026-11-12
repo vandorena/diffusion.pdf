@@ -725,7 +725,7 @@ td.num{
       <figure class="demo">
         <video class="demo-v" width="1870" height="1856"
                autoplay loop muted playsinline preload="metadata" controls>
-          <source src="demo.mp4" type="video/mp4">
+          <source src="demo2.mp4" type="video/mp4">
           Womp Womp. Your browser does not support the video.
         </video>
       </figure>
@@ -860,10 +860,10 @@ td.num{
   "use strict";
 
   // ----------------------------------------------------- the demo recording
-  // Two jobs. First the speed: the capture runs in real time, and 24 seconds of
+  // Two jobs. First the speed: the capture runs in real time, and 36 seconds of
   // watching one 28x28 drawing resolve is longer than anyone gives a page they
-  // have just opened. At RATE it is the same event in a third of the wait, and
-  // the caption says it has been sped up. One number to tune.
+  // have just opened. At RATE it is the same event in half the wait. One number
+  // to tune.
   //
   // Second the ruling. The recording is 1870x1856 and carries no frame, so its
   // height is whatever its width makes it - almost never a whole number of
@@ -871,7 +871,7 @@ td.num{
   // remainder. So the remainder is measured and paid into the bottom margin:
   // whatever the picture and its caption come to, the block is padded up to the
   // next rule. Re-measured on resize, because the height is fluid.
-  var RATE = 3;
+  var RATE = 2;
   var demo = document.querySelector("figure.demo");
   var demoV = demo && demo.querySelector("video");
 
