@@ -34,7 +34,7 @@ def create_page(width, height):
 
 
 def create_field(name, x, y, width, height, value="", f_type=PdfName.Tx,
-                 flags=None, read_only=False, da=None):
+                 flags=None, read_only=False, da=None, background=None):
     annotation = PdfDict()
     annotation.Type = PdfName.Annot
     annotation.Subtype = PdfName.Widget
@@ -51,6 +51,11 @@ def create_field(name, x, y, width, height, value="", f_type=PdfName.Tx,
         annotation.Ff = annotation.Ff | 1
     if flags is not None:
         annotation.F = flags
+    if background is not None:
+        # /MK/BG: a solid fill behind the field's text. Without it a text field
+        # is transparent and whatever sits under it shows through.
+        annotation.MK = PdfDict()
+        annotation.MK.BG = PdfArray(background)
     if da is not None:
         # Default appearance: font, size and colour for the field's text.
         # Without one the viewer picks its own, which is fine for a console but

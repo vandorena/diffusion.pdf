@@ -83,7 +83,7 @@ export function makeSandbox({ lenient = false } = {}) {
 
   function getField(name) {
     if (!fields.has(name)) {
-      if (!lenient && !/^(px|row|console)_\d+$/.test(name) &&
+      if (!lenient && !/^(px|row|console|snk)_\d+$/.test(name) &&
           !["wordInput", "seedInput", "stepsInput", "guidanceInput",
             "status", "liveStatus"].includes(name)) {
         throw new Error(`getField("${name}"): no such field in the built PDF`);
@@ -280,6 +280,32 @@ function main() {
       if (missing) fail(`G4 ${missing} of ${n} pixels were never painted`);
       else if (wrong) fail(`G4 ${wrong} pixels differ, first at ${firstWrong}`);
       else pass(`G4 all ${n} painted levels match the reference exactly`);
+    }
+  }
+
+  // G5 -- the background snake. Decoration, so none of the gates above depend
+  // on it; this only asks that it behave: finish, eat everything, never fold
+  // through itself or jump, and touch nothing but its own rows.
+  if (typeof ctx.dsSnakeRun === "function") {
+    let bad = 0, short = 0;
+    for (const seed of [1, 2, 3, 42, 12345]) {
+      const r = ctx.dsSnakeRun(seed);
+      bad += r.bad;
+      if (r.eaten !== r.total) short++;
+    }
+    bad || short ? fail(`G5 snake: ${bad} illegal moves, ${short} of 5 runs left pellets`)
+                 : pass("G5 snake eats every pellet, no illegal moves (5 seeds)");
+
+    const before = writes.length;
+    try {
+      drainTimers(ctx, timers);
+      const st = ctx.dsSnakeState();
+      const stray = writes.slice(before).filter((w) => !w.name.startsWith("snk_"));
+      st && st.done && !stray.length
+        ? pass(`G5 live snake finished (${st.eaten}/${st.total} in ${st.ticks} ticks), wrote only snk_ rows`)
+        : fail(`G5 live snake: state ${JSON.stringify(st)}, ${stray.length} stray writes`);
+    } catch (e) {
+      fail(`G5 live snake did not finish: ${e.message}`);
     }
   }
 

@@ -723,6 +723,193 @@ try {
     }
 
     // ------------------------------------------------------------------
+    // the snake -- decoration only, nowhere near the verified path
+    // ------------------------------------------------------------------
+    //
+    // A short blocky snake crawls the page behind everything else, eating a
+    // scatter of pellets that appear when the document loads, then stops.
+    //
+    // It is drawn the only way this viewer repaints reliably: text written into
+    // read-only row fields (snk_0 .. snk_N, built under everything else). A
+    // field has a single colour, so the parts are told apart by glyph. One
+    // character per cell: Courier is as wide as it is tall at this size, and
+    // the rows are packed at the same pitch, so the cell is square.
+    //
+    // It owns its own Rng, so the sampler's PRNG stream is untouched, and it is
+    // finite (every pellet eaten, or SNK_MAX_TICKS) so a harness that drains the
+    // timer queue terminates. The simulation (snkNew/snkStep) knows nothing
+    // about fields; rendering is separate, so the harness can run the logic
+    // without a viewer.
+
+    var SNK_COLS = __SNK_COLS__;
+    var SNK_ROWS = __SNK_ROWS__;
+    var SNK_FOOD = __SNK_FOOD__;
+    var SNK_MS = 45;
+    var SNK_MAX_TICKS = 6000;
+    var SNK_START_LEN = 3;
+    var SNK_EMPTY = " ", SNK_HEAD = "@", SNK_BODY = "#", SNK_PELLET = "o";
+    var SNK = null;
+
+    function snkNew(seed) {
+        var n = SNK_COLS * SNK_ROWS;
+        var st = {
+            rng: new Rng(seed), cells: new Uint8Array(n),   // 0 empty, 1 pellet, 2 body
+            body: [], total: SNK_FOOD, eaten: 0, ticks: 0, done: false,
+            dirty: [], rows: [], prev: new Int32Array(n), queue: new Int32Array(n)
+        };
+        // laid out along a row, head on the right
+        var y = st.rng.next() % SNK_ROWS;
+        var x = SNK_START_LEN - 1 + st.rng.next() % (SNK_COLS - SNK_START_LEN + 1);
+        for (var k = SNK_START_LEN - 1; k >= 0; k--) {
+            var c = y * SNK_COLS + x - k;
+            st.body.push(c);
+            st.cells[c] = 2;
+        }
+        var placed = 0;
+        while (placed < st.total) {
+            var f = st.rng.next() % n;
+            if (st.cells[f] === 0) { st.cells[f] = 1; placed++; }
+        }
+        return st;
+    }
+
+    // First step of a shortest path to the nearest pellet, or any free
+    // neighbour if none can be reached, or -1 if boxed in. The tail cell counts
+    // as free: it moves out of the way as the head moves in.
+    function snkNextCell(st, head, tail) {
+        var cells = st.cells, prev = st.prev, queue = st.queue;
+        var W = SNK_COLS, H = SNK_ROWS, n = W * H;
+        var DX = [0, 0, -1, 1], DY = [-1, 1, 0, 0];
+        var spin = st.rng.next() & 3;     // varies which way ties are broken
+        var i;
+        for (i = 0; i < n; i++) prev[i] = -1;
+        prev[head] = head;
+        var qh = 0, qt = 0;
+        queue[qt++] = head;
+        var found = -1;
+        while (qh < qt && found < 0) {
+            var c = queue[qh++];
+            var cx = c % W, cy = (c - cx) / W;
+            for (var d = 0; d < 4; d++) {
+                var k = (d + spin) & 3;
+                var nx = cx + DX[k], ny = cy + DY[k];
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                var m = ny * W + nx;
+                if (prev[m] !== -1) continue;
+                if (cells[m] === 2 && m !== tail) continue;
+                prev[m] = c;
+                if (cells[m] === 1) { found = m; break; }
+                queue[qt++] = m;
+            }
+        }
+        if (found >= 0) {
+            while (prev[found] !== head) found = prev[found];
+            return found;
+        }
+        var hx = head % W, hy = (head - hx) / W, free = [];
+        for (var e = 0; e < 4; e++) {
+            var ex = hx + DX[e], ey = hy + DY[e];
+            if (ex < 0 || ey < 0 || ex >= W || ey >= H) continue;
+            var em = ey * W + ex;
+            if (cells[em] !== 2 || em === tail) free.push(em);
+        }
+        return free.length ? free[st.rng.next() % free.length] : -1;
+    }
+
+    // One move. Returns false once finished. st.dirty lists the cells whose
+    // glyph changed, so only their rows need rewriting.
+    function snkStep(st) {
+        if (st.done) return false;
+        if (st.eaten >= st.total || st.ticks >= SNK_MAX_TICKS) { st.done = true; return false; }
+        var head = st.body[st.body.length - 1], tail = st.body[0];
+        var next = snkNextCell(st, head, tail);
+        if (next < 0) { st.done = true; return false; }
+        st.ticks++;
+        st.dirty = [head, next];
+        if (st.cells[next] === 1) {
+            st.eaten++;
+        } else {
+            st.body.shift();
+            st.cells[tail] = 0;
+            st.dirty.push(tail);
+        }
+        st.body.push(next);
+        st.cells[next] = 2;
+        return true;
+    }
+
+    function snkRowString(st, r) {
+        var head = st.body[st.body.length - 1], base = r * SNK_COLS, s = "";
+        for (var x = 0; x < SNK_COLS; x++) {
+            var c = base + x, v = st.cells[c];
+            s += (c === head) ? SNK_HEAD : v === 2 ? SNK_BODY : v === 1 ? SNK_PELLET : SNK_EMPTY;
+        }
+        return s;
+    }
+
+    // rows === null paints everything; otherwise only the rows of those cells.
+    // A row is written only if its text changed, the same dirty-skip as LAST[].
+    function snkPaint(st, cellsTouched) {
+        var seen = {}, rows = [], i;
+        if (cellsTouched === null) {
+            for (i = 0; i < SNK_ROWS; i++) rows.push(i);
+        } else {
+            for (i = 0; i < cellsTouched.length; i++) {
+                var r = Math.floor(cellsTouched[i] / SNK_COLS);
+                if (!seen[r]) { seen[r] = true; rows.push(r); }
+            }
+        }
+        for (i = 0; i < rows.length; i++) {
+            var str = snkRowString(st, rows[i]);
+            if (str === st.rows[rows[i]]) continue;
+            st.rows[rows[i]] = str;
+            var f = field("snk_" + rows[i]);
+            if (f) f.value = str;
+        }
+    }
+
+    function snkSchedule() {
+        if (TIMER_MODE === "TIMER_ACRO") app.setTimeOut("snkTick()", SNK_MS);
+        else if (TIMER_MODE === "TIMER_DOM") setTimeout(snkTick, SNK_MS);
+    }
+
+    function snkTick() {
+        if (!SNK || SNK.done) return;
+        if (snkStep(SNK)) {
+            snkPaint(SNK, SNK.dirty);
+            snkSchedule();
+        }
+    }
+
+    function snkInit() {
+        if (SNK_ROWS < 1 || TIMER_MODE === "SYNC") return;
+        SNK = snkNew(djb2("snk:" + Date.now()));
+        snkPaint(SNK, null);
+        snkSchedule();
+    }
+
+    // Harness hooks: the live state, and a whole run with no viewer attached.
+    function dsSnakeState() {
+        return SNK ? { eaten: SNK.eaten, total: SNK.total, len: SNK.body.length,
+                       ticks: SNK.ticks, done: SNK.done } : null;
+    }
+
+    function dsSnakeRun(seed) {
+        var st = snkNew(seed), bad = 0, pr = st.body[st.body.length - 1];
+        while (snkStep(st)) {
+            var h = st.body[st.body.length - 1];
+            var hx = h % SNK_COLS, px = pr % SNK_COLS;
+            var step = Math.abs(hx - px) + Math.abs((h - hx) / SNK_COLS - (pr - px) / SNK_COLS);
+            var count = 0;
+            for (var i = 0; i < st.cells.length; i++) if (st.cells[i] === 2) count++;
+            if (step !== 1 || count !== st.body.length) bad++;
+            pr = h;
+        }
+        return { eaten: st.eaten, total: st.total, len: st.body.length,
+                 ticks: st.ticks, bad: bad };
+    }
+
+    // ------------------------------------------------------------------
     // boot
     // ------------------------------------------------------------------
 
@@ -746,4 +933,8 @@ try {
     try {
         if (PX[0]) { PX[0].fillColor = ["G", 1]; canFill = true; }
     } catch (e) { canFill = false; }
+
+    // Last, so the weights are unpacked before anything else is asked of the
+    // viewer. The pellets appear here, and the snake starts on the next tick.
+    snkInit();
 } catch (e) { app.alert(e.stack || e); }

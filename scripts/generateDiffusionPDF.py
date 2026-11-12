@@ -39,6 +39,21 @@ WIDTH = HEIGHT = 700
 CONSOLE_ROWS = 12
 CONSOLE_H = 11
 
+# The background snake lives on a grid of square cells, one read-only text
+# field per grid row, and a cell is one Courier character: 0.6 em wide, so at
+# SNK_FONT pt it is 0.6 * SNK_FONT. SNK_CELL is that, and is also the row pitch,
+# which keeps the cell square. The field itself is SNK_FIELD_H tall, taller
+# than the pitch, so neighbouring fields overlap: the empty cells are spaces, so
+# only the glyphs show and the overlap costs nothing.
+SNK_FONT = 10
+SNK_CELL = 6
+SNK_FIELD_H = 12
+SNK_FOOD = 40
+# Solid white behind the boxes that sit over the snake, so it passes under them.
+PAPER = [1]
+# Black: empty cells are blank, so this colours only the snake and pellets.
+SNK_DA = f"/F1 {SNK_FONT} Tf 0 g"
+
 # Kept in step with seedFromField() in src/diffusion.js, which decides the same
 # thing at runtime. The number is what the document falls back to, and what a
 # baked appearance is rendered from.
@@ -159,6 +174,8 @@ def main():
     # type FALLBACK_SEED into the box first.
     p.add_argument("--seed", default="auto",
                    help='initial value of the seed box: an integer, or "auto"')
+    p.add_argument("--no-snake", action="store_true",
+                   help="leave out the background snake")
     p.add_argument("--word", default="house")
     p.add_argument("--cell", type=int, default=None)
     p.add_argument("--bake-initial", action="store_true",
@@ -196,7 +213,13 @@ def main():
     import hashlib
     model_id = hashlib.sha256(model["w"].encode("ascii")).hexdigest()[:16]
 
+    snk_cols = 0 if a.no_snake else WIDTH // SNK_CELL
+    snk_rows = 0 if a.no_snake else HEIGHT // SNK_CELL
+
     replacements = {
+        "__SNK_COLS__": snk_cols,
+        "__SNK_ROWS__": snk_rows,
+        "__SNK_FOOD__": SNK_FOOD,
         "__MODEL_ID__": model_id,
         "__GRID__": grid,
         "__LEVELS__": a.levels,
@@ -277,7 +300,7 @@ def main():
         for r in range(grid):
             fields.append(create_field(
                 f"row_{r}", x0, char_top - (r + 1) * row_h, span, row_h, "",
-                da=f"/F1 {size:.2f} Tf 0 g"))
+                da=f"/F1 {size:.2f} Tf 0 g", background=PAPER))
     else:
         fields = build_pixel_grid(grid, cell, x0, top, initial)
 
@@ -285,13 +308,16 @@ def main():
     labels_y = controls_y + 27
 
     page.Contents.stream += create_text(x0, labels_y, 8, "Word:")
-    fields.append(create_field("wordInput", x0, controls_y, 150, 22, a.word))
+    fields.append(create_field("wordInput", x0, controls_y, 150, 22, a.word,
+                               background=PAPER))
 
     page.Contents.stream += create_text(x0 + 156, labels_y, 8, "Seed:")
-    fields.append(create_field("seedInput", x0 + 156, controls_y, 52, 22, seed_text))
+    fields.append(create_field("seedInput", x0 + 156, controls_y, 52, 22,
+                               seed_text, background=PAPER))
 
     page.Contents.stream += create_text(x0 + 213, labels_y, 8, "Steps:")
-    fields.append(create_field("stepsInput", x0 + 213, controls_y, 44, 22, str(steps)))
+    fields.append(create_field("stepsInput", x0 + 213, controls_y, 44, 22,
+                               str(steps), background=PAPER))
 
     # No CFG box: the JS falls back to DEF_GUIDANCE (the model's own scale)
     # when guidanceInput is absent, so the control is hidden, not disabled.
@@ -307,7 +333,7 @@ def main():
 
     status_y = controls_y - 26
     fields.append(create_field("status", x0, status_y, span, 20, "ready",
-                               read_only=True))
+                               read_only=True, background=PAPER))
 
     console_top = status_y - 6
     for i in range(CONSOLE_ROWS):
@@ -318,6 +344,22 @@ def main():
     page.Contents.stream += create_text(
         8, 12, 7,
         "Runs entirely in the PDF viewer. Best in a Chromium-based browser.")
+
+    # Annotation order is z-order: the snake's rows go first, so everything
+    # else is drawn and hit-tested above them. Read-only, so Chrome's form
+    # highlight does not tint them.
+    snake = []
+    if snk_rows:
+        row_w = snk_cols * SNK_CELL
+        sx = (WIDTH - row_w) / 2
+        sy = (HEIGHT - snk_rows * SNK_CELL) / 2
+        for r in range(snk_rows):
+            # centred on the row's pitch, so the glyph lands on its own cell
+            cy = HEIGHT - sy - (r + 0.5) * SNK_CELL
+            snake.append(create_field(
+                f"snk_{r}", sx, cy - SNK_FIELD_H / 2, row_w, SNK_FIELD_H,
+                "", read_only=True, da=SNK_DA))
+    fields = snake + fields
 
     page.AA = PdfDict()
     page.AA.O = create_script(js)
